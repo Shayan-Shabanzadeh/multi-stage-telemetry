@@ -1,4 +1,4 @@
-use crate::query_plan::{QueryPlan, Operation};
+use crate::query_plan::{QueryPlan, Operation, Field};
 use crate::packet_info::PacketInfo;
 use crate::count_min_sketch::CountMinSketch;
 use std::collections::HashMap;
@@ -8,9 +8,22 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
 
     for op in &query.operations {
         match op {
-            Operation::Filter(expr) => {
+            Operation::Filter(conditions) => {
                 if let Some(ref p) = current_packet {
-                    if p.tcp_flags == 2 {
+                    let mut pass = true;
+                    for (field, value) in conditions {
+                        pass &= match field {
+                            Field::SourceIp => &p.src_ip == value,
+                            Field::DestIp => &p.dst_ip == value,
+                            Field::SourcePort => p.src_port.to_string() == *value,
+                            Field::DestPort => p.dst_port.to_string() == *value,
+                            Field::TcpFlag => p.tcp_flags.to_string() == *value,
+                        };
+                        if !pass {
+                            break;
+                        }
+                    }
+                    if pass {
                         current_packet = Some(p.clone());
                     } else {
                         current_packet = None;

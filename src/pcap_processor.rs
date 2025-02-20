@@ -3,7 +3,7 @@ use pnet::packet::{Packet, ethernet::EthernetPacket, ip::IpNextHeaderProtocols, 
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
 use std::fs::OpenOptions;
-use std::io::Write; // Import the Write trait
+use std::io::Write;
 use crate::query_parser::parse_query;
 use crate::query_executor::execute_query;
 use crate::packet_info::PacketInfo;

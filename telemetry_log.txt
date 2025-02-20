@@ -1,15 +1,4 @@
-New TCP connections detected: 202.21.43.188 -> True: 5372, Estimated: 5498, RE: 0.0235
-New TCP connections detected: 150.124.181.229 -> True: 581, Estimated: 696, RE: 0.1979
-New TCP connections detected: 203.193.115.144 -> True: 441, Estimated: 558, RE: 0.2653
-New TCP connections detected: 203.193.121.80 -> True: 521, Estimated: 638, RE: 0.2246
-New TCP connections detected: 131.98.137.48 -> True: 417, Estimated: 537, RE: 0.2878
-Average ARE for epoch: 0.1998
-Total packets processed in epoch: 2073503
-Valid entries counted: 5
-New TCP connections detected: 202.21.43.188 -> True: 4830, Estimated: 4954, RE: 0.0257
-New TCP connections detected: 150.124.156.14 -> True: 517, Estimated: 638, RE: 0.2340
-New TCP connections detected: 150.124.181.229 -> True: 428, Estimated: 545, RE: 0.2734
-New TCP connections detected: 131.98.137.48 -> True: 462, Estimated: 585, RE: 0.2662
-Average ARE for epoch: 0.1998
-Total packets processed in epoch: 2447685
-Valid entries counted: 4
+New TCP connections detected: 202.21.43.188 -> True: 5276, Estimated: 5398, RE: 0.0231
+Average ARE for epoch: 0.0231
+Total packets processed in epoch: 2023655
+Valid entries counted: 1
