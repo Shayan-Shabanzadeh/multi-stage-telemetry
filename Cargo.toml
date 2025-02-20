@@ -1,5 +1,5 @@
 [package]
-name = "multi-demo"
+name = "test2"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,4 +7,3 @@ edition = "2021"
 pcap = "0.10"
 pnet = "0.34"
 twox-hash = "1.6"
-
