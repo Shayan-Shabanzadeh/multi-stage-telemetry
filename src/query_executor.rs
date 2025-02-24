@@ -30,6 +30,7 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
                     }
                 }
             }
+            // TODO Map operation does not change the packet, so we just keep the current packet.
             Operation::Map(expr) => {
                 if let Some(ref p) = current_packet {
                     current_packet = Some(PacketInfo {
@@ -51,7 +52,7 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
             Operation::FilterResult(expr) => {
                 if let Some(ref p) = current_packet {
                     let count = sketch.estimate(&p.dst_ip);
-                    if count >= threshold as u64 {
+                    if count >= threshold as u64{ 
                     } else {
                         current_packet = None;
                     }
