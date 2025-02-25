@@ -1,4 +1,0 @@
-New TCP connections detected: 202.21.43.188 -> True: 5276, Estimated: 5398, RE: 0.0231
-Average ARE for epoch: 0.0231
-Total packets processed in epoch: 2023655
-Valid entries counted: 1

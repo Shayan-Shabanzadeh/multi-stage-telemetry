@@ -1,3 +1,6 @@
+# Ignore the target directory
 /target
-telemetry_log.txt
+
+# Ignore telemetry log files
+/telemetry_log.txt
 /src/telemetry_log.txt
