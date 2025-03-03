@@ -39,6 +39,7 @@ fn execute_query_1(
     sketch: &mut CountMinSketch,
     threshold: usize,
     ground_truth: &mut BTreeMap<String, u64>,
+    log_file: &mut std::fs::File,
 ) {
     let (src_ip, _, _, _, tcp_flags) = packet_tuple;
 
@@ -51,6 +52,13 @@ fn execute_query_1(
     sketch.increment(&src_ip, 1);
     let updated_count = sketch.estimate(&src_ip);
     *ground_truth.entry(src_ip.clone()).or_insert(0) = updated_count;
+
+    // TODO remove these lines to Log the packet processing result immediately
+    // let log_entry = format!("Processed packet: src_ip: {}, count: {}", src_ip, updated_count);
+    // println!("{}", log_entry);
+    // if let Err(e) = writeln!(log_file, "{}", log_entry) {
+    //     eprintln!("Failed to write to log file: {}", e);
+    // }
 }
 
 /// Prints and logs the epoch summary with all src_ip counts exceeding the threshold.
@@ -101,7 +109,7 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query_id
 
         if let Some(packet_tuple) = extract_packet_tuple(&packet) {
             match query_id {
-                1 => execute_query_1(packet_tuple, &mut sketch, threshold, &mut ground_truth),
+                1 => execute_query_1(packet_tuple, &mut sketch, threshold, &mut ground_truth, &mut log_file),
                 _ => eprintln!("Invalid query ID: {}", query_id),
             }
         }
