@@ -4,10 +4,12 @@ mod query_plan;
 mod query_executor;
 mod packet_info;
 mod queries;
+mod config;
 
 use std::env;
 use pcap_processor::process_pcap;
 use queries::{query_1, query_2, query_3, query_4};
+use config::read_config;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -32,5 +34,6 @@ fn main() {
         }
     };
 
-    process_pcap(pcap_file, epoch_size, threshold, query);
+    let config = read_config("config.json");
+    process_pcap(pcap_file, epoch_size, threshold, query, config.seed);
 }

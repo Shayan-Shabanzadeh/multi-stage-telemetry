@@ -4,11 +4,9 @@ use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::Write;
 use crate::count_min_sketch::CountMinSketch;
-use crate::query_plan::{QueryPlan, Operation, Field};
+use crate::query_plan::{QueryPlan};
 use crate::query_executor::execute_query;
 use crate::packet_info::PacketInfo;
-use std::thread::sleep;
-use std::time::Duration;
 
 /// Initializes and returns a writable log file.
 fn initialize_log_file(path: &str) -> std::fs::File {
@@ -44,6 +42,7 @@ fn print_epoch_summary(
     total_packets: usize,
     threshold: usize,
     ground_truth: &HashMap<String, u64>,
+    sketch: &CountMinSketch,
     log_file: &mut std::fs::File,
 ) {
     let mut summary = format!(
@@ -51,13 +50,21 @@ fn print_epoch_summary(
         timestamp, total_packets
     );
 
-    let mut valid_entries = Vec::new();
+    let mut valid_entries: Vec<(String, u64, u64)> = ground_truth.iter()
+        .filter(|&(_, &count)| count > threshold as u64)
+        .map(|(src_ip, &real_count)| {
+            let estimated_count = sketch.estimate(src_ip);
+            (src_ip.clone(), real_count, estimated_count)
+        })
+        .collect();
 
-    for (src_ip, &count) in ground_truth.iter().filter(|&(_, &count)| count > threshold as u64) {
-        let entry = format!("(src_ip: {}, count: {})", src_ip, count);
+    // Sort by estimated count in descending order
+    valid_entries.sort_by(|a, b| b.2.cmp(&a.2));
+
+    for (src_ip, real_count, estimated_count) in &valid_entries {
+        let entry = format!("(src_ip: {}, real_count: {}, estimated_count: {})", src_ip, real_count, estimated_count);
         println!("{}", entry);
         summary.push_str(&format!("{}\n", entry));
-        valid_entries.push(entry);
     }
 
     if valid_entries.is_empty() {
@@ -71,10 +78,10 @@ fn print_epoch_summary(
 
 /// Processes the PCAP file and executes the specified query in a streaming manner.
 /// Runs the query line-rate, printing results as soon as conditions are met and providing epoch summaries.
-pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: QueryPlan) {
+pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: QueryPlan, seed: u64) {
     println!("Starting packet processing...");
     let mut cap = Capture::from_file(file_path).expect("Failed to open PCAP file");
-    let mut sketch = CountMinSketch::new(1024, 600);
+    let mut sketch = CountMinSketch::new(1024, 600, seed); // Use the seed from the config
     let mut log_file = initialize_log_file("telemetry_log.txt");
     let mut ground_truth: HashMap<String, u64> = HashMap::new();
 
@@ -99,6 +106,7 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
                 total_packets,
                 threshold,
                 &ground_truth,
+                &sketch,
                 &mut log_file,
             );
 
@@ -117,6 +125,7 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
                 total_packets,
                 threshold,
                 &ground_truth,
+                &sketch,
                 &mut log_file,
             );
         }

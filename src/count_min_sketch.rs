@@ -8,20 +8,22 @@ pub struct CountMinSketch {
     depth: usize,
     table: Vec<Vec<u64>>,
     keys: HashMap<String, usize>,
+    seed: u64, // Add a seed field
 }
 
 impl CountMinSketch {
-    pub fn new(width: usize, depth: usize) -> Self {
+    pub fn new(width: usize, depth: usize, seed: u64) -> Self {
         Self {
             width,
             depth,
             table: vec![vec![0; width]; depth],
             keys: HashMap::new(),
+            seed, // Initialize the seed
         }
     }
 
     fn hash(&self, item: &str, i: u32) -> usize {
-        let mut hasher = XxHash64::with_seed(i as u64);
+        let mut hasher = XxHash64::with_seed(self.seed + i as u64); // Use the seed
         hasher.write(item.as_bytes());
         (hasher.finish() as usize) % self.width
     }
@@ -41,7 +43,7 @@ impl CountMinSketch {
             .unwrap_or(0)
     }
 
-    pub fn clear(&mut self) {
+    pub fn clear(&mut self) { // Change to mutable reference
         for row in &mut self.table {
             row.fill(0);
         }
