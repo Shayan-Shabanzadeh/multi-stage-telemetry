@@ -1,9 +1,14 @@
 use pcap::Capture;
 use pnet::packet::{Packet, ethernet::EthernetPacket, ipv4::Ipv4Packet, tcp::TcpPacket};
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::Write;
 use crate::count_min_sketch::CountMinSketch;
+use crate::query_plan::{QueryPlan, Operation, Field};
+use crate::query_executor::execute_query;
+use crate::packet_info::PacketInfo;
+use std::thread::sleep;
+use std::time::Duration;
 
 /// Initializes and returns a writable log file.
 fn initialize_log_file(path: &str) -> std::fs::File {
@@ -16,49 +21,21 @@ fn initialize_log_file(path: &str) -> std::fs::File {
 }
 
 /// Extracts a tuple from the packet with fields: (src_ip, dst_ip, src_port, dst_port, tcp_flags)
-fn extract_packet_tuple(packet: &pcap::Packet) -> Option<(String, String, u16, u16, u8)> {
+fn extract_packet_tuple(packet: &pcap::Packet) -> Option<PacketInfo> {
     let ethernet = EthernetPacket::new(packet.data)?;
     let ipv4 = Ipv4Packet::new(ethernet.payload())?;
 
     if ipv4.get_next_level_protocol() == pnet::packet::ip::IpNextHeaderProtocols::Tcp {
-        TcpPacket::new(ipv4.payload()).map(|tcp| (
-            ipv4.get_source().to_string(),
-            ipv4.get_destination().to_string(),
-            tcp.get_source(),
-            tcp.get_destination(),
-            tcp.get_flags(),
-        ))
+        TcpPacket::new(ipv4.payload()).map(|tcp| PacketInfo {
+            src_ip: ipv4.get_source().to_string(),
+            dst_ip: ipv4.get_destination().to_string(),
+            src_port: tcp.get_source(),
+            dst_port: tcp.get_destination(),
+            tcp_flags: tcp.get_flags(),
+        })
     } else {
         None
     }
-}
-
-/// Executes Query 1: TCP SYN packet detection and Count-Min Sketch updating.
-fn execute_query_1(
-    packet_tuple: (String, String, u16, u16, u8),
-    sketch: &mut CountMinSketch,
-    threshold: usize,
-    ground_truth: &mut BTreeMap<String, u64>,
-    log_file: &mut std::fs::File,
-) {
-    let (src_ip, _, _, _, tcp_flags) = packet_tuple;
-
-    // Step 1: Filter only TCP SYN packets (tcp_flags == 2)
-    if tcp_flags != 2 {
-        return;
-    }
-
-    // Step 2: Map to (src_ip, 1) and update Count-Min Sketch
-    sketch.increment(&src_ip, 1);
-    let updated_count = sketch.estimate(&src_ip);
-    *ground_truth.entry(src_ip.clone()).or_insert(0) = updated_count;
-
-    // TODO remove these lines to Log the packet processing result immediately
-    // let log_entry = format!("Processed packet: src_ip: {}, count: {}", src_ip, updated_count);
-    // println!("{}", log_entry);
-    // if let Err(e) = writeln!(log_file, "{}", log_entry) {
-    //     eprintln!("Failed to write to log file: {}", e);
-    // }
 }
 
 /// Prints and logs the epoch summary with all src_ip counts exceeding the threshold.
@@ -66,7 +43,7 @@ fn print_epoch_summary(
     timestamp: u64,
     total_packets: usize,
     threshold: usize,
-    ground_truth: &BTreeMap<String, u64>,
+    ground_truth: &HashMap<String, u64>,
     log_file: &mut std::fs::File,
 ) {
     let mut summary = format!(
@@ -94,24 +71,23 @@ fn print_epoch_summary(
 
 /// Processes the PCAP file and executes the specified query in a streaming manner.
 /// Runs the query line-rate, printing results as soon as conditions are met and providing epoch summaries.
-pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query_id: u8) {
+pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: QueryPlan) {
+    println!("Starting packet processing...");
     let mut cap = Capture::from_file(file_path).expect("Failed to open PCAP file");
     let mut sketch = CountMinSketch::new(1024, 600);
     let mut log_file = initialize_log_file("telemetry_log.txt");
-    let mut ground_truth: BTreeMap<String, u64> = BTreeMap::new();
+    let mut ground_truth: HashMap<String, u64> = HashMap::new();
 
     let mut total_packets = 0;
     let mut current_epoch_start: Option<u64> = None;
 
     while let Ok(packet) = cap.next_packet() {
+        // println!("Processing packet...");
         let packet_timestamp = packet.header.ts.tv_sec as u64;
         current_epoch_start.get_or_insert(packet_timestamp);
 
-        if let Some(packet_tuple) = extract_packet_tuple(&packet) {
-            match query_id {
-                1 => execute_query_1(packet_tuple, &mut sketch, threshold, &mut ground_truth, &mut log_file),
-                _ => eprintln!("Invalid query ID: {}", query_id),
-            }
+        if let Some(packet_info) = extract_packet_tuple(&packet) {
+            execute_query(&query, packet_info, threshold, &mut sketch, &mut ground_truth);
         }
 
         total_packets += 1;
@@ -145,4 +121,5 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query_id
             );
         }
     }
+    println!("Finished packet processing.");
 }

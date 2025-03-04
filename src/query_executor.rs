@@ -3,7 +3,7 @@ use crate::packet_info::PacketInfo;
 use crate::count_min_sketch::CountMinSketch;
 use std::collections::HashMap;
 
-pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sketch: &mut CountMinSketch, ground_truth: &mut HashMap<String, usize>) {
+pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sketch: &mut CountMinSketch, ground_truth: &mut HashMap<String, u64>) {
     let mut current_packet = Some(packet);
 
     for op in &query.operations {
@@ -30,8 +30,7 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
                     }
                 }
             }
-            // TODO Map operation does not change the packet, so we just keep the current packet.
-            Operation::Map(expr) => {
+            Operation::Map(_expr) => {
                 if let Some(ref p) = current_packet {
                     current_packet = Some(PacketInfo {
                         src_ip: p.src_ip.clone(),
@@ -43,16 +42,17 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
                 }
                 // No transformation here; the next stage (reduce) will use the destination IP.
             }
-            Operation::Reduce { keys: _, function } => {
+            Operation::Reduce { keys: _, function: _ } => {
                 if let Some(ref p) = current_packet {
                     sketch.increment(&p.dst_ip, 1);
                     *ground_truth.entry(p.dst_ip.clone()).or_insert(0) += 1;
                 }
             }
-            Operation::FilterResult(expr) => {
+            Operation::FilterResult(_expr) => {
                 if let Some(ref p) = current_packet {
                     let count = sketch.estimate(&p.dst_ip);
-                    if count >= threshold as u64{ 
+                    if count >= threshold as u64 {
+                        // println!("Packet passed filter result: dst_ip: {}, count: {}", p.dst_ip, count);
                     } else {
                         current_packet = None;
                     }
