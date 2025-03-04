@@ -44,10 +44,18 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
             Operation::Reduce { keys: _, function: _, reduce_type } => {
                 if let Some(ref p) = current_packet {
                     match reduce_type {
-                        ReduceType::CountMinReduce { width, depth, seed } => {
-                            let sketch_key = format!("CountMinSketch_{}_{}", width, depth);
+                        ReduceType::CMReduce { memory_in_bytes, depth, seed } => {
+                            let sketch_key = format!("CMSketch_{}_{}", memory_in_bytes, depth);
                             let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
-                                Sketch::new_count_min_sketch(*width, *depth, *seed)
+                                Sketch::new_cm_sketch(*memory_in_bytes, *depth, *seed)
+                            });
+                            sketch.increment(&p.dst_ip, 1);
+                            *ground_truth.entry(p.dst_ip.clone()).or_insert(0) += 1;
+                        }
+                        ReduceType::FCMReduce { width, depth, seed } => {
+                            let sketch_key = format!("FCMSketch_{}_{}", width, depth);
+                            let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
+                                Sketch::new_fcm_sketch(*width, *depth, *seed)
                             });
                             sketch.increment(&p.dst_ip, 1);
                             *ground_truth.entry(p.dst_ip.clone()).or_insert(0) += 1;
@@ -60,7 +68,7 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
                 if let Some(ref p) = current_packet {
                     let count = sketches.values().map(|sketch| sketch.estimate(&p.dst_ip)).max().unwrap_or(0);
                     if count >= threshold as u64 {
-                        // println!("Packet passed filter result: dst_ip: {}, count: {}", p.dst_ip, count);
+                        println!("Packet passed filter result: dst_ip: {}, count: {}", p.dst_ip, count);
                     } else {
                         current_packet = None;
                     }

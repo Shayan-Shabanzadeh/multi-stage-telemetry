@@ -78,7 +78,7 @@ fn print_epoch_summary(
 
 /// Processes the PCAP file and executes the specified query in a streaming manner.
 /// Runs the query line-rate, printing results as soon as conditions are met and providing epoch summaries.
-pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: QueryPlan, seed: u64) {
+pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: QueryPlan) {
     println!("Starting packet processing...");
     let mut cap = Capture::from_file(file_path).expect("Failed to open PCAP file");
     let mut sketches: HashMap<String, Sketch> = HashMap::new();

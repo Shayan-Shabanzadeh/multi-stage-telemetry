@@ -8,7 +8,7 @@ pub fn query_1() -> QueryPlan {
             Operation::Reduce {
                 keys: vec!["src_ip".to_string()],
                 function: "count".to_string(),
-                reduce_type: ReduceType::CountMinReduce { width: 1024, depth: 600, seed: 42 },
+                reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
             },
             Operation::FilterResult("count > Th".to_string()),
         ],
@@ -23,7 +23,7 @@ pub fn query_2() -> QueryPlan {
             Operation::Reduce {
                 keys: vec!["dst_ip".to_string()],
                 function: "count".to_string(),
-                reduce_type: ReduceType::CountMinReduce { width: 1024, depth: 600, seed: 42 },
+                reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
             },
             Operation::FilterResult("count > Th".to_string()),
         ],
@@ -38,7 +38,7 @@ pub fn query_3() -> QueryPlan {
             Operation::Reduce {
                 keys: vec!["src_ip".to_string()],
                 function: "count".to_string(),
-                reduce_type: ReduceType::CountMinReduce { width: 1024, depth: 600, seed: 42 },
+                reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
             },
             Operation::FilterResult("count > Th".to_string()),
         ],
@@ -53,7 +53,7 @@ pub fn query_4() -> QueryPlan {
             Operation::Reduce {
                 keys: vec!["dst_ip".to_string()],
                 function: "count".to_string(),
-                reduce_type: ReduceType::CountMinReduce { width: 1024, depth: 600, seed: 42 },
+                reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
             },
             Operation::FilterResult("count > Th".to_string()),
         ],
