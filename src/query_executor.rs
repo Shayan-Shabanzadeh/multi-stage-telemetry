@@ -52,10 +52,10 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
                             sketch.increment(&p.dst_ip, 1);
                             *ground_truth.entry(p.dst_ip.clone()).or_insert(0) += 1;
                         }
-                        ReduceType::FCMReduce { width, depth, seed } => {
-                            let sketch_key = format!("FCMSketch_{}_{}", width, depth);
+                        ReduceType::FCMReduce { depth, width, seed } => {
+                            let sketch_key = format!("FCMSketch_{}_{}", depth, width);
                             let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
-                                Sketch::new_fcm_sketch(*width, *depth, *seed)
+                                Sketch::new_fcm_sketch(*depth, *width, *seed)
                             });
                             sketch.increment(&p.dst_ip, 1);
                             *ground_truth.entry(p.dst_ip.clone()).or_insert(0) += 1;

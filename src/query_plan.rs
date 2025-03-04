@@ -8,7 +8,7 @@ pub enum Field {
 
 pub enum ReduceType {
     CMReduce { memory_in_bytes: usize, depth: usize, seed: u64 },
-    FCMReduce { width: usize, depth: usize, seed: u64 },
+    FCMReduce { depth: usize, width: usize, seed: u64 },
     // Add other reduce types here in the future
 }
 

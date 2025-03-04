@@ -66,50 +66,95 @@ impl CMSketch {
 }
 
 pub struct FCMSketch {
-    width: usize,
     depth: usize,
-    table: Vec<Vec<u64>>,
-    seed: u64,
+    width: usize,
+    counters: Vec<Vec<u32>>,
+    hash_seeds: Vec<u32>,
+    hh_candidates: HashSet<u32>,
+    cumul_l2: u32,
+    cumul_l3: u32,
 }
 
 impl FCMSketch {
-    pub fn new(width: usize, depth: usize, seed: u64) -> Self {
+    pub fn new(depth: usize, width: usize, seed: u64) -> Self {
+        let mut hash_seeds = Vec::with_capacity(depth);
+        for i in 0..depth {
+            hash_seeds.push((seed as u32).wrapping_add(i as u32));
+        }
         Self {
-            width,
             depth,
-            table: vec![vec![0; width]; depth],
-            seed,
+            width,
+            counters: vec![vec![0; width]; depth],
+            hash_seeds,
+            hh_candidates: HashSet::new(),
+            cumul_l2: u32::MAX - 1,
+            cumul_l3: u32::MAX - 2, 
         }
     }
 
-    pub fn insert(&mut self, item: &[u8], count: u64) {
-        let hash = self.hash(item);
-        for i in 0..self.depth {
-            let index = (hash + i as u64) as usize % self.width;
-            self.table[i][index] += count;
+    pub fn insert(&mut self, item: &[u8], count: u32) {
+        let mut hash_index = vec![0; self.depth];
+        let mut ret_val = vec![0; self.depth];
+        let mut hh_flag = true;
+
+        for d in 0..self.depth {
+            hash_index[d] = self.hash(item, self.hash_seeds[d]) % self.width;
+        }
+
+        for d in 0..self.depth {
+            ret_val[d] = self.increment_counter(d, hash_index[d], count);
+            if ret_val[d] <= 10000 {
+                hh_flag = false;
+            }
+        }
+
+        if hh_flag {
+            self.hh_candidates.insert(u32::from_ne_bytes(item.try_into().unwrap()));
         }
     }
 
-    pub fn query(&self, item: &[u8]) -> u64 {
-        let hash = self.hash(item);
-        (0..self.depth)
-            .map(|i| self.table[i][(hash + i as u64) as usize % self.width])
-            .min()
-            .unwrap_or(0)
-    }
+    pub fn query(&self, item: &[u8]) -> u32 {
+        let mut hash_index = vec![0; self.depth];
+        let mut ret_val = vec![0; self.depth];
+        let mut count_query = u32::MAX;
 
-    pub fn clear(&mut self) {
-        for row in &mut self.table {
-            row.fill(0);
+        for d in 0..self.depth {
+            hash_index[d] = self.hash(item, self.hash_seeds[d]) % self.width;
         }
+
+        for d in 0..self.depth {
+            ret_val[d] = self.query_counter(d, hash_index[d]);
+            count_query = count_query.min(ret_val[d]);
+        }
+
+        count_query
     }
 
-    fn hash(&self, item: &[u8]) -> u64 {
-        let mut hash = self.seed;
+    pub fn get_cardinality(&self) -> i32 {
+        let mut avgnum_empty_counter = 0;
+        for d in 0..self.depth {
+            avgnum_empty_counter += self.counters[d].iter().filter(|&&x| x == 0).count();
+        }
+        (self.width as f64 * (self.width as f64 / avgnum_empty_counter as f64).ln()) as i32
+    }
+
+    fn increment_counter(&mut self, depth: usize, index: usize, count: u32) -> u32 {
+        let old_val = self.counters[depth][index];
+        let new_val = old_val.saturating_add(count);
+        self.counters[depth][index] = new_val;
+        new_val
+    }
+
+    fn query_counter(&self, depth: usize, index: usize) -> u32 {
+        self.counters[depth][index]
+    }
+
+    fn hash(&self, item: &[u8], seed: u32) -> usize {
+        let mut hash = seed;
         for &byte in item {
-            hash = hash.wrapping_mul(31).wrapping_add(byte as u64);
+            hash = hash.wrapping_mul(31).wrapping_add(byte as u32);
         }
-        hash
+        hash as usize
     }
 }
 
@@ -123,28 +168,28 @@ impl Sketch {
         Sketch::CMSketch(CMSketch::new(memory_in_bytes, depth, seed))
     }
 
-    pub fn new_fcm_sketch(width: usize, depth: usize, seed: u64) -> Self {
-        Sketch::FCMSketch(FCMSketch::new(width, depth, seed))
+    pub fn new_fcm_sketch(depth: usize, width: usize, seed: u64) -> Self {
+        Sketch::FCMSketch(FCMSketch::new(depth, width, seed))
     }
 
     pub fn increment(&mut self, item: &str, count: u64) {
         match self {
             Sketch::CMSketch(sketch) => sketch.insert(item.as_bytes(), count as i32),
-            Sketch::FCMSketch(sketch) => sketch.insert(item.as_bytes(), count),
+            Sketch::FCMSketch(sketch) => sketch.insert(item.as_bytes(), count as u32),
         }
     }
 
     pub fn estimate(&self, item: &str) -> u64 {
         match self {
             Sketch::CMSketch(sketch) => sketch.query(item.as_bytes()) as u64,
-            Sketch::FCMSketch(sketch) => sketch.query(item.as_bytes()),
+            Sketch::FCMSketch(sketch) => sketch.query(item.as_bytes()) as u64,
         }
     }
 
     pub fn clear(&mut self) {
         match self {
             Sketch::CMSketch(sketch) => sketch.counters.iter_mut().for_each(|row| row.fill(0)),
-            Sketch::FCMSketch(sketch) => sketch.clear(),
+            Sketch::FCMSketch(sketch) => sketch.counters.iter_mut().for_each(|row| row.fill(0)),
         }
     }
 }
