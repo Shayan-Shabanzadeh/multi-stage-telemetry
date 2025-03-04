@@ -4,3 +4,4 @@
 # Ignore telemetry log files
 /telemetry_log.txt
 /src/telemetry_log.txt
+/src/memory_log.txt
