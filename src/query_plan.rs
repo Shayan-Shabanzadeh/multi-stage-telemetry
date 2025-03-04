@@ -15,8 +15,13 @@ pub enum ReduceType {
 pub enum Operation {
     Filter(Vec<(Field, String)>),
     Map(String),
-    Reduce { keys: Vec<String>, function: String, reduce_type: ReduceType },
+    Reduce {
+        keys: Vec<String>,
+        function: String,
+        reduce_type: ReduceType,
+    },
     FilterResult(String),
+    Distinct(Vec<String>),
 }
 
 pub struct QueryPlan {

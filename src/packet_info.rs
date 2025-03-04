@@ -5,4 +5,5 @@ pub struct PacketInfo {
     pub src_port: u16,
     pub dst_port: u16,
     pub tcp_flags: u8,
+    pub total_len: u16,
 }

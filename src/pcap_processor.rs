@@ -30,6 +30,7 @@ fn extract_packet_tuple(packet: &pcap::Packet) -> Option<PacketInfo> {
             src_port: tcp.get_source(),
             dst_port: tcp.get_destination(),
             tcp_flags: tcp.get_flags(),
+            total_len: ipv4.get_total_length(), // Ensure this line is correct
         })
     } else {
         None
@@ -45,6 +46,7 @@ fn print_epoch_summary(
     sketches: &HashMap<String, Sketch>,
     log_file: &mut std::fs::File,
 ) {
+    println!("Printing epoch summary..."); // Debugging statement
     let mut summary = format!(
         "\n=== EPOCH SUMMARY ===\nEpoch end timestamp: {}\nTotal packets processed: {}\n",
         timestamp, total_packets
@@ -63,7 +65,7 @@ fn print_epoch_summary(
 
     for (src_ip, real_count, estimated_count) in &valid_entries {
         let entry = format!("(src_ip: {}, real_count: {}, estimated_count: {})", src_ip, real_count, estimated_count);
-        println!("{}", entry);
+        println!("{}", entry); // Debugging statement
         summary.push_str(&format!("{}\n", entry));
     }
 
@@ -73,6 +75,8 @@ fn print_epoch_summary(
 
     if let Err(e) = writeln!(log_file, "{}", summary.trim_end()) {
         eprintln!("Failed to write to log file: {}", e);
+    } else {
+        println!("Successfully wrote to log file."); // Debugging statement
     }
 }
 

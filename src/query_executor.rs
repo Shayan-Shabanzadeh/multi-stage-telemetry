@@ -1,10 +1,11 @@
 use crate::query_plan::{QueryPlan, Operation, Field, ReduceType};
 use crate::packet_info::PacketInfo;
 use crate::sketch::Sketch;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sketches: &mut HashMap<String, Sketch>, ground_truth: &mut HashMap<String, u64>) {
     let mut current_packet = Some(packet);
+    let mut seen = HashSet::new();
 
     for op in &query.operations {
         match op {
@@ -38,6 +39,7 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
                         src_port: p.src_port,
                         dst_port: p.dst_port,
                         tcp_flags: p.tcp_flags,
+                        total_len: p.total_len, // Ensure this line is correct
                     });
                 }
             }
@@ -74,6 +76,27 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
                     }
                 }
             }
+            Operation::Distinct(keys) => {
+                if let Some(ref p) = current_packet {
+                    let key = extract_key(p, keys);
+                    if seen.contains(&key) {
+                        current_packet = None;
+                    } else {
+                        seen.insert(key);
+                    }
+                }
+            }
         }
     }
+}
+
+fn extract_key(packet: &PacketInfo, keys: &Vec<String>) -> Vec<u8> {
+    keys.iter().flat_map(|key| match key.as_str() {
+        "src_ip" => packet.src_ip.as_bytes().to_vec(),
+        "dst_ip" => packet.dst_ip.as_bytes().to_vec(),
+        "src_port" => packet.src_port.to_be_bytes().to_vec(),
+        "dst_port" => packet.dst_port.to_be_bytes().to_vec(),
+        "total_len" => packet.total_len.to_be_bytes().to_vec(),
+        _ => vec![],
+    }).collect()
 }
