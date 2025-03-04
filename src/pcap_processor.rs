@@ -3,6 +3,7 @@ use pnet::packet::{Packet, ethernet::EthernetPacket, ipv4::Ipv4Packet, tcp::TcpP
 use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::time::Instant;
 use crate::sketch::Sketch;
 use crate::query_plan::{QueryPlan};
 use crate::query_executor::execute_query;
@@ -40,6 +41,7 @@ fn extract_packet_tuple(packet: &pcap::Packet) -> Option<PacketInfo> {
 /// Prints and logs the epoch summary with all src_ip counts exceeding the threshold.
 fn print_epoch_summary(
     timestamp: u64,
+    epoch_packets: usize,
     total_packets: usize,
     threshold: usize,
     ground_truth: &HashMap<String, u64>,
@@ -48,8 +50,8 @@ fn print_epoch_summary(
 ) {
     println!("Printing epoch summary..."); // Debugging statement
     let mut summary = format!(
-        "\n=== EPOCH SUMMARY ===\nEpoch end timestamp: {}\nTotal packets processed: {}\n",
-        timestamp, total_packets
+        "\n=== EPOCH SUMMARY ===\nEpoch end timestamp: {}\nPackets processed this epoch: {}\nTotal packets processed: {}\n",
+        timestamp, epoch_packets, total_packets
     );
 
     let mut valid_entries: Vec<(String, u64, u64)> = ground_truth.iter()
@@ -90,7 +92,12 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
     let mut ground_truth: HashMap<String, u64> = HashMap::new();
 
     let mut total_packets = 0;
+    let mut epoch_packets = 0;
     let mut current_epoch_start: Option<u64> = None;
+    let mut epoch_count = 0;
+
+    // Start the timer
+    let start_time = Instant::now();
 
     while let Ok(packet) = cap.next_packet() {
         // println!("Processing packet...");
@@ -102,11 +109,14 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
         }
 
         total_packets += 1;
+        epoch_packets += 1;
 
         // Epoch boundary: print summary if epoch size is reached
         if packet_timestamp - current_epoch_start.unwrap() >= epoch_size {
+            epoch_count += 1;
             print_epoch_summary(
                 packet_timestamp,
+                epoch_packets,
                 total_packets,
                 threshold,
                 &ground_truth,
@@ -116,16 +126,18 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
 
             sketches.values_mut().for_each(|sketch| sketch.clear());
             ground_truth.clear();
-            total_packets = 0;
+            epoch_packets = 0;
             current_epoch_start = Some(packet_timestamp);
         }
     }
 
     // Final epoch summary for any remaining packets
     if let Some(epoch_start) = current_epoch_start {
-        if total_packets > 0 {
+        if epoch_packets > 0 {
+            epoch_count += 1;
             print_epoch_summary(
                 epoch_start,
+                epoch_packets,
                 total_packets,
                 threshold,
                 &ground_truth,
@@ -134,5 +146,22 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
             );
         }
     }
+
+    // Stop the timer
+    let elapsed_time = start_time.elapsed();
+    let elapsed_seconds = elapsed_time.as_secs_f64();
+    let packets_per_second = total_packets as f64 / elapsed_seconds;
+    let average_packets_per_epoch = total_packets as f64 / epoch_count as f64;
+
     println!("Finished packet processing.");
+    println!("Total packets processed: {}", total_packets);
+    println!("Elapsed time: {:.2} seconds", elapsed_seconds);
+    println!("Average packets per second: {:.2}", packets_per_second);
+    println!("Average packets per epoch: {:.2}", average_packets_per_epoch);
+
+    if let Err(e) = writeln!(log_file, "\n=== PERFORMANCE METRICS ===\nTotal packets processed: {}\nElapsed time: {:.2} seconds\nAverage packets per second: {:.2}\nAverage packets per epoch: {:.2}\n", total_packets, elapsed_seconds, packets_per_second, average_packets_per_epoch) {
+        eprintln!("Failed to write performance metrics to log file: {}", e);
+    } else {
+        println!("Successfully wrote performance metrics to log file.");
+    }
 }

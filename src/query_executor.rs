@@ -70,7 +70,7 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
                 if let Some(ref p) = current_packet {
                     let count = sketches.values().map(|sketch| sketch.estimate(&p.dst_ip)).max().unwrap_or(0);
                     if count >= threshold as u64 {
-                        println!("Packet passed filter result: dst_ip: {}, count: {}", p.dst_ip, count);
+                        // println!("Packet passed filter result: dst_ip: {}, count: {}", p.dst_ip, count);
                     } else {
                         current_packet = None;
                     }
