@@ -1,10 +1,10 @@
-mod count_min_sketch;
-mod pcap_processor;
+mod sketch;
 mod query_plan;
 mod query_executor;
 mod packet_info;
 mod queries;
 mod config;
+mod pcap_processor; // Add this line to declare the pcap_processor module
 
 use std::env;
 use pcap_processor::process_pcap;

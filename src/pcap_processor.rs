@@ -3,7 +3,7 @@ use pnet::packet::{Packet, ethernet::EthernetPacket, ipv4::Ipv4Packet, tcp::TcpP
 use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::Write;
-use crate::count_min_sketch::CountMinSketch;
+use crate::sketch::Sketch;
 use crate::query_plan::{QueryPlan};
 use crate::query_executor::execute_query;
 use crate::packet_info::PacketInfo;
@@ -42,7 +42,7 @@ fn print_epoch_summary(
     total_packets: usize,
     threshold: usize,
     ground_truth: &HashMap<String, u64>,
-    sketch: &CountMinSketch,
+    sketches: &HashMap<String, Sketch>,
     log_file: &mut std::fs::File,
 ) {
     let mut summary = format!(
@@ -53,7 +53,7 @@ fn print_epoch_summary(
     let mut valid_entries: Vec<(String, u64, u64)> = ground_truth.iter()
         .filter(|&(_, &count)| count > threshold as u64)
         .map(|(src_ip, &real_count)| {
-            let estimated_count = sketch.estimate(src_ip);
+            let estimated_count = sketches.values().map(|sketch| sketch.estimate(src_ip)).max().unwrap_or(0);
             (src_ip.clone(), real_count, estimated_count)
         })
         .collect();
@@ -81,7 +81,7 @@ fn print_epoch_summary(
 pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: QueryPlan, seed: u64) {
     println!("Starting packet processing...");
     let mut cap = Capture::from_file(file_path).expect("Failed to open PCAP file");
-    let mut sketch = CountMinSketch::new(1024, 600, seed); // Use the seed from the config
+    let mut sketches: HashMap<String, Sketch> = HashMap::new();
     let mut log_file = initialize_log_file("telemetry_log.txt");
     let mut ground_truth: HashMap<String, u64> = HashMap::new();
 
@@ -94,7 +94,7 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
         current_epoch_start.get_or_insert(packet_timestamp);
 
         if let Some(packet_info) = extract_packet_tuple(&packet) {
-            execute_query(&query, packet_info, threshold, &mut sketch, &mut ground_truth);
+            execute_query(&query, packet_info, threshold, &mut sketches, &mut ground_truth);
         }
 
         total_packets += 1;
@@ -106,11 +106,11 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
                 total_packets,
                 threshold,
                 &ground_truth,
-                &sketch,
+                &sketches,
                 &mut log_file,
             );
 
-            sketch.clear();
+            sketches.values_mut().for_each(|sketch| sketch.clear());
             ground_truth.clear();
             total_packets = 0;
             current_epoch_start = Some(packet_timestamp);
@@ -125,7 +125,7 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
                 total_packets,
                 threshold,
                 &ground_truth,
-                &sketch,
+                &sketches,
                 &mut log_file,
             );
         }

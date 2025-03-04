@@ -1,9 +1,9 @@
-use crate::query_plan::{QueryPlan, Operation, Field};
+use crate::query_plan::{QueryPlan, Operation, Field, ReduceType};
 use crate::packet_info::PacketInfo;
-use crate::count_min_sketch::CountMinSketch;
+use crate::sketch::Sketch;
 use std::collections::HashMap;
 
-pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sketch: &mut CountMinSketch, ground_truth: &mut HashMap<String, u64>) {
+pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sketches: &mut HashMap<String, Sketch>, ground_truth: &mut HashMap<String, u64>) {
     let mut current_packet = Some(packet);
 
     for op in &query.operations {
@@ -40,17 +40,25 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
                         tcp_flags: p.tcp_flags,
                     });
                 }
-                // No transformation here; the next stage (reduce) will use the destination IP.
             }
-            Operation::Reduce { keys: _, function: _ } => {
+            Operation::Reduce { keys: _, function: _, reduce_type } => {
                 if let Some(ref p) = current_packet {
-                    sketch.increment(&p.dst_ip, 1);
-                    *ground_truth.entry(p.dst_ip.clone()).or_insert(0) += 1;
+                    match reduce_type {
+                        ReduceType::CountMinReduce { width, depth, seed } => {
+                            let sketch_key = format!("CountMinSketch_{}_{}", width, depth);
+                            let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
+                                Sketch::new_count_min_sketch(*width, *depth, *seed)
+                            });
+                            sketch.increment(&p.dst_ip, 1);
+                            *ground_truth.entry(p.dst_ip.clone()).or_insert(0) += 1;
+                        }
+                        // Add other reduce types here in the future
+                    }
                 }
             }
             Operation::FilterResult(_expr) => {
                 if let Some(ref p) = current_packet {
-                    let count = sketch.estimate(&p.dst_ip);
+                    let count = sketches.values().map(|sketch| sketch.estimate(&p.dst_ip)).max().unwrap_or(0);
                     if count >= threshold as u64 {
                         // println!("Packet passed filter result: dst_ip: {}, count: {}", p.dst_ip, count);
                     } else {
