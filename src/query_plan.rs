@@ -4,6 +4,7 @@ pub enum Field {
     SourcePort,
     DestPort,
     TcpFlag,
+    Protocol,
 }
 
 pub enum ReduceType {

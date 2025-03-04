@@ -19,6 +19,7 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
                             Field::SourcePort => p.src_port.to_string() == *value,
                             Field::DestPort => p.dst_port.to_string() == *value,
                             Field::TcpFlag => p.tcp_flags.to_string() == *value,
+                            Field::Protocol => p.protocol.to_string() == *value,
                         };
                         if !pass {
                             break;
@@ -40,6 +41,7 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
                         dst_port: p.dst_port,
                         tcp_flags: p.tcp_flags,
                         total_len: p.total_len, // Ensure this line is correct
+                        protocol: p.protocol,
                     });
                 }
             }
@@ -51,16 +53,16 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
                             let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
                                 Sketch::new_cm_sketch(*memory_in_bytes, *depth, *seed)
                             });
-                            sketch.increment(&p.dst_ip, 1);
-                            *ground_truth.entry(p.dst_ip.clone()).or_insert(0) += 1;
+                            sketch.increment(&p.src_ip, 1);
+                            *ground_truth.entry(p.src_ip.clone()).or_insert(0) += 1;
                         }
                         ReduceType::FCMReduce { depth, width, seed } => {
                             let sketch_key = format!("FCMSketch_{}_{}", depth, width);
                             let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
                                 Sketch::new_fcm_sketch(*depth, *width, *seed)
                             });
-                            sketch.increment(&p.dst_ip, 1);
-                            *ground_truth.entry(p.dst_ip.clone()).or_insert(0) += 1;
+                            sketch.increment(&p.src_ip, 1);
+                            *ground_truth.entry(p.src_ip.clone()).or_insert(0) += 1;
                         }
                         // Add other reduce types here in the future
                     }
@@ -68,9 +70,9 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
             }
             Operation::FilterResult(_expr) => {
                 if let Some(ref p) = current_packet {
-                    let count = sketches.values().map(|sketch| sketch.estimate(&p.dst_ip)).max().unwrap_or(0);
+                    let count = sketches.values().map(|sketch| sketch.estimate(&p.src_ip)).max().unwrap_or(0);
                     if count >= threshold as u64 {
-                        // println!("Packet passed filter result: dst_ip: {}, count: {}", p.dst_ip, count);
+                        // println!("Packet passed filter result: src_ip: {}, count: {}", p.src_ip, count);
                     } else {
                         current_packet = None;
                     }

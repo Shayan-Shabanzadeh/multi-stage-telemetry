@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::convert::TryInto;
 
 pub struct CMSketch {
     depth: usize,
@@ -109,7 +110,9 @@ impl FCMSketch {
         }
 
         if hh_flag {
-            self.hh_candidates.insert(u32::from_ne_bytes(item.try_into().unwrap()));
+            if let Ok(item_u32) = item.try_into().map(u32::from_ne_bytes) {
+                self.hh_candidates.insert(item_u32);
+            }
         }
     }
 

@@ -21,7 +21,7 @@ fn initialize_log_file(path: &str) -> std::fs::File {
         .expect("Cannot open log file")
 }
 
-/// Extracts a tuple from the packet with fields: (src_ip, dst_ip, src_port, dst_port, tcp_flags)
+/// Extracts a tuple from the packet with fields: (src_ip, dst_ip, src_port, dst_port, tcp_flags, protocol)
 fn extract_packet_tuple(packet: &pcap::Packet) -> Option<PacketInfo> {
     let ethernet = EthernetPacket::new(packet.data)?;
     let ipv4 = Ipv4Packet::new(ethernet.payload())?;
@@ -34,6 +34,7 @@ fn extract_packet_tuple(packet: &pcap::Packet) -> Option<PacketInfo> {
             dst_port: tcp.get_destination(),
             tcp_flags: tcp.get_flags(),
             total_len: ipv4.get_total_length(), // Ensure this line is correct
+            protocol: ipv4.get_next_level_protocol().0,
         })
     } else {
         None

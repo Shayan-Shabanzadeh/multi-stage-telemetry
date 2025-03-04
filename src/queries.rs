@@ -10,7 +10,9 @@ pub fn query_1() -> QueryPlan {
             Operation::Reduce {
                 keys: vec!["src_ip".to_string()],
                 function: "count".to_string(),
-                reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+                // reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+                reduce_type: ReduceType::FCMReduce { depth: 4, width: 1024, seed: 42 },
+
             },
             Operation::FilterResult("count > Th".to_string()),
         ],
@@ -56,19 +58,29 @@ pub fn query_3() -> QueryPlan {
     }
 }
 
-/// Query 4: Detect TCP FIN-ACK flood attacks
-/// This query filters packets with TCP flag set to 18 (FIN-ACK),
+
+/// Query 4: Detect port scan attacks
+/// One host is scanning a lot of different ports, potentially before an attack.
 pub fn query_4() -> QueryPlan {
     QueryPlan {
         operations: vec![
-            Operation::Filter(vec![(Field::TcpFlag, "18".to_string())]),
-            Operation::Map("(p.dst_ip, 1)".to_string()),
+            Operation::Filter(vec![(Field::Protocol, "6".to_string())]), // Filter TCP packets
+            Operation::Map("(p.src_ip, p.dst_port)".to_string()),
+            Operation::Distinct(vec!["src_ip".to_string(), "dst_port".to_string()]),
+            Operation::Map("(p.src_ip, 1)".to_string()),
             Operation::Reduce {
-                keys: vec!["dst_ip".to_string()],
-                function: "count".to_string(),
+                keys: vec!["src_ip".to_string()],
+                function: "sum".to_string(),
+                // reduce_type: ReduceType::FCMReduce { depth: 4, width: 1024, seed: 42 },
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
             },
-            Operation::FilterResult("count > Th".to_string()),
+            Operation::FilterResult("count >= T".to_string()),
+            Operation::Map("(p.src_ip)".to_string()),
         ],
     }
 }
+
+
+/// TODO Query 5: Detect DDoS attacks
+
+
