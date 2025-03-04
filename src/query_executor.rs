@@ -88,6 +88,31 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
                     }
                 }
             }
+            Operation::Join { left_query, right_query, join_key } => {
+                // Execute the left and right queries separately
+                let mut left_results = HashMap::new();
+                let mut right_results = HashMap::new();
+
+                if let Some(ref p) = current_packet {
+                    // println!("Executing left query for join...");
+                    execute_query(left_query, p.clone(), threshold, sketches, &mut left_results);
+                    println!("Left query results: {:?}", left_results);
+
+                    // println!("Executing right query for join...");
+                    execute_query(right_query, p.clone(), threshold, sketches, &mut right_results);
+                    println!("Right query results: {:?}", right_results);
+
+                    // Perform the join operation
+                    for (left_key, left_value) in left_results.iter() {
+                        if let Some(right_value) = right_results.get(left_key) {
+                            // Combine the results from the left and right queries
+                            let combined_value = left_value + right_value;
+                            ground_truth.insert(left_key.clone(), combined_value);
+                            println!("Join result: key = {}, left_value = {}, right_value = {}, combined_value = {}", left_key, left_value, right_value, combined_value); // Debugging statement
+                        }
+                    }
+                }
+            }
         }
     }
 }

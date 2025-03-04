@@ -1,0 +1,40 @@
+query 7.1
+
+Starting packet processing...
+Printing epoch summary...
+(src_ip: 95.217.58.9, real_count: 4648, estimated_count: 4978)
+(src_ip: 185.150.227.193, real_count: 3027, estimated_count: 3358)
+(src_ip: 89.88.156.43, real_count: 2022, estimated_count: 2377)
+(src_ip: 45.216.2.120, real_count: 2091, estimated_count: 2233)
+(src_ip: 61.215.151.121, real_count: 1772, estimated_count: 2117)
+(src_ip: 89.88.153.60, real_count: 1659, estimated_count: 1883)
+(src_ip: 104.109.133.225, real_count: 1604, estimated_count: 1690)
+(src_ip: 170.216.39.178, real_count: 1366, estimated_count: 1643)
+(src_ip: 176.133.213.238, real_count: 1362, estimated_count: 1542)
+(src_ip: 87.177.236.90, real_count: 1100, estimated_count: 1474)
+(src_ip: 194.170.80.222, real_count: 1141, estimated_count: 1393)
+(src_ip: 83.145.65.133, real_count: 1022, estimated_count: 1332)
+(src_ip: 79.113.66.67, real_count: 1014, estimated_count: 1224)
+(src_ip: 172.53.110.117, real_count: 1072, estimated_count: 1207)
+(src_ip: 87.177.236.78, real_count: 1104, estimated_count: 1185)
+(src_ip: 79.113.66.222, real_count: 1054, estimated_count: 1117)
+
+
+Successfully wrote to log file.
+Printing epoch summary...
+(src_ip: 95.217.58.9, real_count: 4600, estimated_count: 4880)
+(src_ip: 185.150.227.193, real_count: 3053, estimated_count: 3364)
+(src_ip: 89.88.156.43, real_count: 2047, estimated_count: 2430)
+(src_ip: 45.216.2.120, real_count: 1998, estimated_count: 2128)
+(src_ip: 89.88.153.60, real_count: 1628, estimated_count: 1846)
+(src_ip: 104.109.133.225, real_count: 1567, estimated_count: 1669)
+(src_ip: 176.133.213.238, real_count: 1447, estimated_count: 1597)
+(src_ip: 170.216.39.178, real_count: 1378, estimated_count: 1582)
+(src_ip: 87.177.236.90, real_count: 1120, estimated_count: 1559)
+(src_ip: 194.170.80.222, real_count: 1121, estimated_count: 1530)
+(src_ip: 61.215.151.121, real_count: 1009, estimated_count: 1314)
+(src_ip: 172.53.110.117, real_count: 1114, estimated_count: 1259)
+(src_ip: 79.113.66.67, real_count: 1054, estimated_count: 1258)
+(src_ip: 87.177.236.78, real_count: 1075, estimated_count: 1146)
+
+

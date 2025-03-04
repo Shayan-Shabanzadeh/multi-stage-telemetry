@@ -8,7 +8,7 @@ mod pcap_processor;
 
 use std::env;
 use pcap_processor::process_pcap;
-use queries::{query_1, query_2, query_3, query_4};
+use queries::{query_1, query_2, query_3, query_4, query_7, query_7_1, query_7_2};
 use config::read_config;
 
 fn main() {
@@ -28,6 +28,9 @@ fn main() {
         2 => query_2(),
         3 => query_3(),
         4 => query_4(),
+        7 => query_7(),
+        71 => query_7_1(),
+        72 => query_7_2(),
         _ => {
             eprintln!("Invalid query ID: {}", query_id);
             return;

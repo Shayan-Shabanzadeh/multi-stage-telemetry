@@ -1,0 +1,140 @@
+query 7.2
+
+
+=== EPOCH SUMMARY ===
+Epoch end timestamp: 1723438810
+Packets processed this epoch: 1506490
+Total packets processed: 1506490
+(src_ip: 108.161.161.251, real_count: 1025, estimated_count: 1025)
+(src_ip: 11.45.1.231, real_count: 8, estimated_count: 8)
+(src_ip: 3.57.200.248, real_count: 8, estimated_count: 8)
+
+=== EPOCH SUMMARY ===
+Epoch end timestamp: 1723438820
+Packets processed this epoch: 1776667
+Total packets processed: 3283157
+(src_ip: 108.161.161.251, real_count: 1444, estimated_count: 1444)
+(src_ip: 11.244.166.55, real_count: 8, estimated_count: 8)
+(src_ip: 11.45.1.230, real_count: 8, estimated_count: 8)
+(src_ip: 9.157.166.43, real_count: 8, estimated_count: 8)
+(src_ip: 11.45.1.228, real_count: 8, estimated_count: 8)
+(src_ip: 15.4.131.13, real_count: 8, estimated_count: 8)
+(src_ip: 11.244.166.53, real_count: 8, estimated_count: 8)
+(src_ip: 9.157.166.40, real_count: 4, estimated_count: 4)
+
+=== EPOCH SUMMARY ===
+Epoch end timestamp: 1723438830
+Packets processed this epoch: 1763964
+Total packets processed: 5047121
+(src_ip: 108.161.161.251, real_count: 1652, estimated_count: 1652)
+(src_ip: 251.115.230.14, real_count: 13, estimated_count: 13)
+(src_ip: 251.115.230.15, real_count: 13, estimated_count: 13)
+(src_ip: 251.115.230.12, real_count: 13, estimated_count: 13)
+(src_ip: 248.159.135.1, real_count: 8, estimated_count: 8)
+(src_ip: 13.149.68.224, real_count: 8, estimated_count: 8)
+(src_ip: 11.244.166.54, real_count: 8, estimated_count: 8)
+(src_ip: 13.149.68.225, real_count: 8, estimated_count: 8)
+(src_ip: 248.159.135.0, real_count: 8, estimated_count: 8)
+(src_ip: 252.223.8.206, real_count: 8, estimated_count: 8)
+(src_ip: 253.129.240.249, real_count: 8, estimated_count: 8)
+(src_ip: 13.149.68.227, real_count: 8, estimated_count: 8)
+(src_ip: 11.158.66.248, real_count: 8, estimated_count: 8)
+(src_ip: 15.4.131.14, real_count: 8, estimated_count: 8)
+(src_ip: 253.129.240.248, real_count: 8, estimated_count: 8)
+(src_ip: 11.158.66.250, real_count: 8, estimated_count: 8)
+(src_ip: 15.4.131.12, real_count: 8, estimated_count: 8)
+(src_ip: 12.77.87.28, real_count: 8, estimated_count: 8)
+(src_ip: 5.138.196.193, real_count: 8, estimated_count: 8)
+(src_ip: 252.223.8.207, real_count: 8, estimated_count: 8)
+(src_ip: 11.158.66.251, real_count: 8, estimated_count: 8)
+(src_ip: 5.138.196.194, real_count: 8, estimated_count: 8)
+(src_ip: 253.129.240.251, real_count: 8, estimated_count: 8)
+(src_ip: 252.223.8.204, real_count: 8, estimated_count: 8)
+(src_ip: 248.159.135.2, real_count: 8, estimated_count: 8)
+(src_ip: 3.57.200.249, real_count: 8, estimated_count: 8)
+(src_ip: 254.231.15.62, real_count: 7, estimated_count: 7)
+(src_ip: 9.157.166.40, real_count: 4, estimated_count: 4)
+
+=== EPOCH SUMMARY ===
+Epoch end timestamp: 1723438840
+Packets processed this epoch: 1348684
+Total packets processed: 6395805
+(src_ip: 108.161.161.251, real_count: 1128, estimated_count: 1128)
+(src_ip: 3.57.200.251, real_count: 8, estimated_count: 8)
+(src_ip: 254.231.15.61, real_count: 8, estimated_count: 8)
+(src_ip: 254.231.15.63, real_count: 8, estimated_count: 8)
+(src_ip: 12.77.87.29, real_count: 8, estimated_count: 8)
+(src_ip: 5.138.196.192, real_count: 8, estimated_count: 8)
+(src_ip: 12.77.87.30, real_count: 8, estimated_count: 8)
+(src_ip: 12.77.87.31, real_count: 8, estimated_count: 8)
+(src_ip: 9.157.166.41, real_count: 8, estimated_count: 8)
+
+=== EPOCH SUMMARY ===
+Epoch end timestamp: 1723438850
+Packets processed this epoch: 1347275
+Total packets processed: 7743080
+(src_ip: 108.161.161.251, real_count: 1195, estimated_count: 1195)
+(src_ip: 127.135.254.31, real_count: 2, estimated_count: 2)
+
+=== EPOCH SUMMARY ===
+Epoch end timestamp: 1723438860
+Packets processed this epoch: 1360673
+Total packets processed: 9103753
+(src_ip: 108.161.161.251, real_count: 1353, estimated_count: 1353)
+
+=== EPOCH SUMMARY ===
+Epoch end timestamp: 1723438870
+Packets processed this epoch: 1584092
+Total packets processed: 10687845
+(src_ip: 108.161.161.251, real_count: 986, estimated_count: 986)
+
+=== EPOCH SUMMARY ===
+Epoch end timestamp: 1723438880
+Packets processed this epoch: 1429692
+Total packets processed: 12117537
+(src_ip: 108.161.161.251, real_count: 1736, estimated_count: 1736)
+(src_ip: 11.244.166.54, real_count: 8, estimated_count: 8)
+(src_ip: 3.57.200.251, real_count: 8, estimated_count: 8)
+(src_ip: 11.45.1.228, real_count: 8, estimated_count: 8)
+(src_ip: 15.4.131.14, real_count: 8, estimated_count: 8)
+(src_ip: 11.244.166.53, real_count: 8, estimated_count: 8)
+(src_ip: 5.138.196.193, real_count: 8, estimated_count: 8)
+(src_ip: 11.45.1.230, real_count: 8, estimated_count: 8)
+(src_ip: 5.138.196.194, real_count: 8, estimated_count: 8)
+(src_ip: 9.157.166.43, real_count: 8, estimated_count: 8)
+(src_ip: 11.45.1.231, real_count: 8, estimated_count: 8)
+
+=== EPOCH SUMMARY ===
+Epoch end timestamp: 1723438890
+Packets processed this epoch: 1448288
+Total packets processed: 13565825
+(src_ip: 108.161.161.251, real_count: 1742, estimated_count: 1742)
+(src_ip: 251.115.230.14, real_count: 13, estimated_count: 13)
+(src_ip: 251.115.230.15, real_count: 13, estimated_count: 13)
+(src_ip: 251.115.230.12, real_count: 13, estimated_count: 13)
+(src_ip: 13.149.68.224, real_count: 8, estimated_count: 8)
+(src_ip: 248.159.135.1, real_count: 8, estimated_count: 8)
+(src_ip: 254.231.15.62, real_count: 8, estimated_count: 8)
+(src_ip: 13.149.68.225, real_count: 8, estimated_count: 8)
+(src_ip: 248.159.135.0, real_count: 8, estimated_count: 8)
+(src_ip: 254.231.15.61, real_count: 8, estimated_count: 8)
+(src_ip: 252.223.8.206, real_count: 8, estimated_count: 8)
+(src_ip: 253.129.240.249, real_count: 8, estimated_count: 8)
+(src_ip: 13.149.68.227, real_count: 8, estimated_count: 8)
+(src_ip: 15.4.131.13, real_count: 8, estimated_count: 8)
+(src_ip: 11.158.66.248, real_count: 8, estimated_count: 8)
+(src_ip: 253.129.240.248, real_count: 8, estimated_count: 8)
+(src_ip: 254.231.15.63, real_count: 8, estimated_count: 8)
+(src_ip: 11.158.66.250, real_count: 8, estimated_count: 8)
+(src_ip: 12.77.87.28, real_count: 8, estimated_count: 8)
+(src_ip: 12.77.87.29, real_count: 8, estimated_count: 8)
+(src_ip: 252.223.8.207, real_count: 8, estimated_count: 8)
+(src_ip: 5.138.196.192, real_count: 8, estimated_count: 8)
+(src_ip: 11.158.66.251, real_count: 8, estimated_count: 8)
+(src_ip: 11.244.166.55, real_count: 8, estimated_count: 8)
+(src_ip: 12.77.87.30, real_count: 8, estimated_count: 8)
+(src_ip: 253.129.240.251, real_count: 8, estimated_count: 8)
+(src_ip: 252.223.8.204, real_count: 8, estimated_count: 8)
+(src_ip: 248.159.135.2, real_count: 8, estimated_count: 8)
+(src_ip: 12.77.87.31, real_count: 8, estimated_count: 8)
+(src_ip: 9.157.166.41, real_count: 8, estimated_count: 8)

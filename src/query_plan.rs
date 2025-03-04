@@ -23,6 +23,11 @@ pub enum Operation {
     },
     FilterResult(String),
     Distinct(Vec<String>),
+    Join {
+        left_query: Box<QueryPlan>,
+        right_query: Box<QueryPlan>,
+        join_key: String,
+    },
 }
 
 pub struct QueryPlan {
