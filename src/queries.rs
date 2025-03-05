@@ -81,6 +81,4 @@ pub fn query_4() -> QueryPlan {
 }
 
 
-/// TODO Query 5: Detect DDoS attacks
-
 

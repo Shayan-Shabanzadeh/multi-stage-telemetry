@@ -5,6 +5,8 @@ mod packet_info;
 mod queries;
 mod config;
 mod pcap_processor;
+mod cm_sketch;
+mod fcm_sketch;
 
 use std::env;
 use pcap_processor::process_pcap;
