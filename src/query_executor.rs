@@ -40,38 +40,39 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
                         src_port: p.src_port,
                         dst_port: p.dst_port,
                         tcp_flags: p.tcp_flags,
-                        total_len: p.total_len, // Ensure this line is correct
+                        total_len: p.total_len,
                         protocol: p.protocol,
                     });
                 }
             }
-            Operation::Reduce { keys: _, function: _, reduce_type } => {
+            Operation::Reduce { keys, function: _, reduce_type } => {
                 if let Some(ref p) = current_packet {
+                    let key = generate_key(p, keys);
+
                     match reduce_type {
                         ReduceType::CMReduce { memory_in_bytes, depth, seed } => {
                             let sketch_key = format!("CMSketch_{}_{}", memory_in_bytes, depth);
                             let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
                                 Sketch::new_cm_sketch(*memory_in_bytes, *depth, *seed)
                             });
-                            sketch.increment(&p.src_ip, 1);
-                            *ground_truth.entry(p.src_ip.clone()).or_insert(0) += 1;
+                            sketch.increment(&key, 1);
+                            *ground_truth.entry(key.clone()).or_insert(0) += 1;
                         }
                         ReduceType::FCMReduce { depth, width, seed } => {
                             let sketch_key = format!("FCMSketch_{}_{}", depth, width);
                             let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
                                 Sketch::new_fcm_sketch(*depth, *width, *seed)
                             });
-                            sketch.increment(&p.src_ip, 1);
-                            *ground_truth.entry(p.src_ip.clone()).or_insert(0) += 1;
+                            sketch.increment(&key, 1);
+                            *ground_truth.entry(key.clone()).or_insert(0) += 1;
                         }
                         ReduceType::ElasticReduce { depth, width, seed } => {
                             let sketch_key = format!("ElasticSketch_{}_{}", depth, width);
                             let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
                                 Sketch::new_elastic_sketch(*depth, *width, *seed)
                             });
-
-                            sketch.increment(&p.src_ip, 1);
-                            *ground_truth.entry(p.src_ip.clone()).or_insert(0) += 1;
+                            sketch.increment(&key, 1);
+                            *ground_truth.entry(key.clone()).or_insert(0) += 1;
                         }
                         // Add other reduce types here in the future
                     }
@@ -99,6 +100,13 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
             }
         }
     }
+}
+
+fn generate_key(packet: &PacketInfo, keys: &Vec<String>) -> String {
+    keys.iter()
+        .map(|key| packet.get(key).unwrap_or_else(|| "".to_string()))
+        .collect::<Vec<String>>()
+        .join("_")
 }
 
 fn extract_key(packet: &PacketInfo, keys: &Vec<String>) -> Vec<u8> {
