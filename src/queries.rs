@@ -12,6 +12,8 @@ pub fn query_1() -> QueryPlan {
                 function: "count".to_string(),
                 // reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
                 reduce_type: ReduceType::FCMReduce { depth: 4, width: 1024, seed: 42 },
+                // reduce_type: ReduceType::ElasticReduce { depth: 4, width: 1024, seed: 42 },
+
 
             },
             Operation::FilterResult("count > Th".to_string()),

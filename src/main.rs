@@ -7,6 +7,7 @@ mod config;
 mod pcap_processor;
 mod cm_sketch;
 mod fcm_sketch;
+mod elastic_sketch;
 
 use std::env;
 use pcap_processor::process_pcap;
@@ -36,6 +37,6 @@ fn main() {
         }
     };
 
-    let config = read_config("config.json");
+    let _config = read_config("config.json");
     process_pcap(pcap_file, epoch_size, threshold, query);
 }

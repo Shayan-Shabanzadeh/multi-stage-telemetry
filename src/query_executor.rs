@@ -64,6 +64,15 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
                             sketch.increment(&p.src_ip, 1);
                             *ground_truth.entry(p.src_ip.clone()).or_insert(0) += 1;
                         }
+                        ReduceType::ElasticReduce { depth, width, seed } => {
+                            let sketch_key = format!("ElasticSketch_{}_{}", depth, width);
+                            let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
+                                Sketch::new_elastic_sketch(*depth, *width, *seed)
+                            });
+
+                            sketch.increment(&p.src_ip, 1);
+                            *ground_truth.entry(p.src_ip.clone()).or_insert(0) += 1;
+                        }
                         // Add other reduce types here in the future
                     }
                 }
