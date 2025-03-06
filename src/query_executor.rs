@@ -20,6 +20,7 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
                             Field::DestPort => p.dst_port.to_string() == *value,
                             Field::TcpFlag => p.tcp_flags.to_string() == *value,
                             Field::Protocol => p.protocol.to_string() == *value,
+                            Field::DnsNsType => p.dns_ns_type.map_or(false, |v| v.to_string() == *value),
                         };
                         if !pass {
                             break;
@@ -42,6 +43,7 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
                         tcp_flags: p.tcp_flags,
                         total_len: p.total_len,
                         protocol: p.protocol,
+                        dns_ns_type: p.dns_ns_type,
                     });
                 }
             }

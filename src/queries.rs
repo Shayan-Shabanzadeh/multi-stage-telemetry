@@ -6,12 +6,12 @@ pub fn query_1() -> QueryPlan {
     QueryPlan {
         operations: vec![
             Operation::Filter(vec![(Field::TcpFlag, "2".to_string())]),
-            Operation::Map("(p.src_ip, 1)".to_string()),
+            Operation::Map("(p.dst_ip, 1)".to_string()),
             Operation::Reduce {
-                keys: vec!["src_ip".to_string()],
-                function: "count".to_string(),
-                // reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
-                reduce_type: ReduceType::FCMReduce { depth: 4, width: 1024, seed: 42 },
+                keys: vec!["dst_ip".to_string()],
+                function: "sum".to_string(),
+                reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+                // reduce_type: ReduceType::FCMReduce { depth: 4, width: 1024, seed: 42 },
                 // reduce_type: ReduceType::ElasticReduce { depth: 4, width: 1024, seed: 42 },
 
 
@@ -82,5 +82,42 @@ pub fn query_4() -> QueryPlan {
     }
 }
 
+/// Query 5: Detect heavy hitters
+/// Hosts that send a large amount of data to specific destinations.
+pub fn query_5() -> QueryPlan {
+    QueryPlan {
+        operations: vec![
+            Operation::Map("(p.dst_ip, p.src_ip, p.total_len)".to_string()),
+            Operation::Reduce {
+                keys: vec!["dst_ip".to_string(), "src_ip".to_string()],
+                function: "sum".to_string(),
+                reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+            },
+            Operation::FilterResult("total_len >= 40".to_string()),
+            Operation::Map("(p.dst_ip)".to_string()),
+        ],
+    }
+}
 
+//  Query 11: Detect DNS reflection attacks
+//  Hosts that receive a large number of DNS responses from specific sources.
+pub fn query_11() -> QueryPlan {
+    QueryPlan {
+        operations: vec![
+            Operation::Filter(vec![(Field::Protocol, "17".to_string())]), // Filter UDP packets
+            Operation::Filter(vec![(Field::SourcePort, "53".to_string())]), // Filter DNS responses
+            Operation::Filter(vec![(Field::DnsNsType, "46".to_string())]), // Filter specific DNS type
+            Operation::Map("(p.dst_ip, p.src_ip)".to_string()),
+            Operation::Distinct(vec!["dst_ip".to_string(), "src_ip".to_string()]),
+            Operation::Map("(p.dst_ip, 1)".to_string()),
+            Operation::Reduce {
+                keys: vec!["dst_ip".to_string()],
+                function: "sum".to_string(),
+                reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+            },
+            Operation::FilterResult("count >= 40".to_string()),
+            Operation::Map("(p.dst_ip)".to_string()),
+        ],
+    }
+}
 

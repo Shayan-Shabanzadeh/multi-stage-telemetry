@@ -7,6 +7,7 @@ pub struct PacketInfo {
     pub tcp_flags: u8,
     pub total_len: u16,
     pub protocol: u8,
+    pub dns_ns_type: Option<u16>, // Add this line
 }
 
 impl PacketInfo {
@@ -19,6 +20,7 @@ impl PacketInfo {
             "tcp_flags" => Some(self.tcp_flags.to_string()),
             "total_len" => Some(self.total_len.to_string()),
             "protocol" => Some(self.protocol.to_string()),
+            "dns_ns_type" => self.dns_ns_type.map(|v| v.to_string()), // Add this line
             _ => None,
         }
     }

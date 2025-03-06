@@ -33,8 +33,9 @@ fn extract_packet_tuple(packet: &pcap::Packet) -> Option<PacketInfo> {
             src_port: tcp.get_source(),
             dst_port: tcp.get_destination(),
             tcp_flags: tcp.get_flags(),
-            total_len: ipv4.get_total_length(), // Ensure this line is correct
+            total_len: ipv4.get_total_length(),
             protocol: ipv4.get_next_level_protocol().0,
+            dns_ns_type: None, // Initialize with None
         })
     } else {
         None

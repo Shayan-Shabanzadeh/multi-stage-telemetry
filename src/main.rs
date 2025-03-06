@@ -11,7 +11,7 @@ mod elastic_sketch;
 
 use std::env;
 use pcap_processor::process_pcap;
-use queries::{query_1, query_2, query_3, query_4};
+use queries::{query_1, query_2, query_3, query_4 , query_5,query_11};
 use config::read_config;
 
 fn main() {
@@ -31,6 +31,8 @@ fn main() {
         2 => query_2(),
         3 => query_3(),
         4 => query_4(),
+        5 => query_5(),
+        11 => query_11(),
         _ => {
             eprintln!("Invalid query ID: {}", query_id);
             return;
