@@ -72,7 +72,7 @@ fn print_epoch_summary(
 ) {
     println!("Printing epoch summary...");
     let mut summary = format!(
-        "\n=== EPOCH SUMMARY ===\nEpoch end timestamp: {}\nPackets processed this epoch: {}\nTotal packets processed: {}\n",
+        "Epoch end timestamp,Packets processed this epoch,Total packets processed\n{}, {}, {}\n",
         timestamp, epoch_packets, total_packets
     );
 
@@ -84,10 +84,10 @@ fn print_epoch_summary(
     // Sort by count in descending order
     valid_entries.sort_by(|a, b| b.1.cmp(&a.1));
 
+    summary.push_str("Flow key,Count\n");
     for (flow_key, count) in &valid_entries {
-        let entry = format!("(flow_key: {:?}, count: {})", flow_key, count);
-        println!("{}", entry); // Debugging statement
-        summary.push_str(&format!("{}\n", entry));
+        let entry = format!("{:?},{}\n", flow_key, count);
+        summary.push_str(&entry);
     }
 
     if valid_entries.is_empty() {
@@ -107,8 +107,8 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
     println!("Starting packet processing...");
     let mut cap = Capture::from_file(file_path).expect("Failed to open PCAP file");
     let mut sketches: HashMap<String, Sketch> = HashMap::new();
-    let mut log_file = initialize_log_file("telemetry_log.txt");
-    let mut memory_log_file = initialize_log_file("memory_log.txt"); // New log file for memory usage
+    let mut log_file = initialize_log_file("telemetry_log.csv");
+    let mut memory_log_file = initialize_log_file("memory_log.csv"); // New log file for memory usage
     let mut ground_truth: HashMap<String, u64> = HashMap::new();
     let mut flow_counts: HashMap<(String, String, u16, u16, u8, u16, u8), u64> = HashMap::new(); // Map to store flow counts
 
@@ -215,7 +215,7 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
     println!("Average packets per epoch: {:.2}", average_packets_per_epoch);
     println!("Peak memory usage: {} KB", peak_memory);
 
-    if let Err(e) = writeln!(log_file, "\n=== PERFORMANCE METRICS ===\nTotal packets processed: {}\nElapsed time: {:.2} seconds\nAverage packets per second: {:.2}\nAverage packets per epoch: {:.2}\nPeak memory usage: {} KB\n",
+    if let Err(e) = writeln!(log_file, "Total packets processed,Elapsed time (seconds),Average packets per second,Average packets per epoch,Peak memory usage (KB)\n{},{:.2},{:.2},{:.2},{}",
         total_packets, elapsed_seconds, packets_per_second, average_packets_per_epoch, peak_memory) {
         eprintln!("Failed to write performance metrics to log file: {}", e);
     } else {
