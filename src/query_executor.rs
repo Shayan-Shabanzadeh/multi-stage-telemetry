@@ -157,6 +157,18 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
                     }
                 }
             }
+            Operation::Join(other_query, join_keys) => {
+                if let Some(ref p) = current_packet {
+                    let other_result = execute_query(other_query, p.clone(), sketches, ground_truth);
+                    if let Some(other_packet) = other_result {
+                        let joined_packet = join_packets(p, &other_packet, join_keys);
+                        current_packet = Some(joined_packet);
+                        // println!("Joined packet: {:?}", current_packet);
+                    } else {
+                        current_packet = None;
+                    }
+                }
+            }
         }
     }
 
@@ -229,4 +241,22 @@ fn extract_key(packet: &(String, String, u16, u16, u8, u16, u8, Option<u16>), ke
         "dns_ns_type" => packet.7.map_or(vec![], |v| v.to_be_bytes().to_vec()),
         _ => vec![],
     }).collect()
+}
+
+fn join_packets(packet1: &(String, String, u16, u16, u8, u16, u8, Option<u16>), packet2: &(String, String, u16, u16, u8, u16, u8, Option<u16>), join_keys: &Vec<String>) -> (String, String, u16, u16, u8, u16, u8, Option<u16>) {
+    let mut joined_packet = packet1.clone();
+    for key in join_keys {
+        match key.as_str() {
+            "src_ip" => joined_packet.0 = packet2.0.clone(),
+            "dst_ip" => joined_packet.1 = packet2.1.clone(),
+            "src_port" => joined_packet.2 = packet2.2,
+            "dst_port" => joined_packet.3 = packet2.3,
+            "tcp_flags" => joined_packet.4 = packet2.4,
+            "total_len" => joined_packet.5 = packet2.5,
+            "protocol" => joined_packet.6 = packet2.6,
+            "dns_ns_type" => joined_packet.7 = packet2.7,
+            _ => {}
+        }
+    }
+    joined_packet
 }
