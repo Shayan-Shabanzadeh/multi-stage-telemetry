@@ -34,40 +34,81 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
             }
             Operation::Map(expr) => {
                 if let Some(ref p) = current_packet {
-                    println!("Before Map: {:?}", p);
+                    // println!("Before Map: {:?}", p);
                     let new_tuple = map_packet(p, expr);
-                    println!("After Map: {:?}", new_tuple);
+                    // println!("After Map: {:?}", new_tuple);
                     current_packet = Some(new_tuple);
                 }
             }
             Operation::Reduce { keys, function: _, reduce_type } => {
                 if let Some(ref p) = current_packet {
                     let key = generate_key(p, keys);
-
+                    // println!("Before reduce: {:?}", p);
+                    // println!("Key: {:?}", key);
                     match reduce_type {
                         ReduceType::CMReduce { memory_in_bytes, depth, seed } => {
                             let sketch_key = format!("CMSketch_{}_{}", memory_in_bytes, depth);
                             let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
                                 Sketch::new_cm_sketch(*memory_in_bytes, *depth, *seed)
                             });
-                            sketch.increment(&key, 1);
-                            *ground_truth.entry(key.clone()).or_insert(0) += 1;
+
+                            // Get the current count from the sketch
+                            let current_count = sketch.estimate(&key);
+
+                            // Update the sketch with the new count
+                            if let Some(count) = p.7 {
+                                sketch.increment(&key, count as u64);
+                            } else {
+                                eprintln!("Error: Count value not found in tuple");
+                                return;
+                            }
+
+                            // Update the tuple with the new count
+                            let new_count = current_count + p.7.unwrap() as u64;
+                            current_packet = Some(update_tuple_with_count(p, new_count));
+                            // println!("After reduce: {:?}", current_packet);
                         }
                         ReduceType::FCMReduce { depth, width, seed } => {
                             let sketch_key = format!("FCMSketch_{}_{}", depth, width);
                             let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
                                 Sketch::new_fcm_sketch(*depth, *width, *seed)
                             });
-                            sketch.increment(&key, 1);
-                            *ground_truth.entry(key.clone()).or_insert(0) += 1;
+
+                            // Get the current count from the sketch
+                            let current_count = sketch.estimate(&key);
+
+                            // Update the sketch with the new count
+                            if let Some(count) = p.7 {
+                                sketch.increment(&key, count as u64);
+                            } else {
+                                eprintln!("Error: Count value not found in tuple");
+                                return;
+                            }
+
+                            // Update the tuple with the new count
+                            let new_count = current_count + p.7.unwrap() as u64;
+                            current_packet = Some(update_tuple_with_count(p, new_count));
                         }
                         ReduceType::ElasticReduce { depth, width, seed } => {
                             let sketch_key = format!("ElasticSketch_{}_{}", depth, width);
                             let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
                                 Sketch::new_elastic_sketch(*depth, *width, *seed)
                             });
-                            sketch.increment(&key, 1);
-                            *ground_truth.entry(key.clone()).or_insert(0) += 1;
+
+                            // Get the current count from the sketch
+                            let current_count = sketch.estimate(&key);
+
+                            // Update the sketch with the new count
+                            if let Some(count) = p.7 {
+                                sketch.increment(&key, count as u64);
+                            } else {
+                                eprintln!("Error: Count value not found in tuple");
+                                return;
+                            }
+
+                            // Update the tuple with the new count
+                            let new_count = current_count + p.7.unwrap() as u64;
+                            current_packet = Some(update_tuple_with_count(p, new_count));
                         }
                         // Add other reduce types here in the future
                     }
@@ -76,6 +117,7 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
             Operation::FilterResult(_expr) => {
                 if let Some(ref p) = current_packet {
                     let count = sketches.values().map(|sketch| sketch.estimate(&p.0)).max().unwrap_or(0);
+                    // println!("FilterResult: {:?} and count :{}", p , count);
                     if count >= threshold as u64 {
                         // println!("Packet passed filter result: src_ip: {}, count: {}", p.0, count);
                     } else {
@@ -121,6 +163,19 @@ fn map_packet(packet: &(String, String, u16, u16, u8, u16, u8, Option<u16>), exp
     }
 
     new_tuple
+}
+
+fn update_tuple_with_count(packet: &(String, String, u16, u16, u8, u16, u8, Option<u16>), count: u64) -> (String, String, u16, u16, u8, u16, u8, Option<u16>) {
+    (
+        packet.0.clone(),
+        packet.1.clone(),
+        packet.2,
+        packet.3,
+        packet.4,
+        packet.5,
+        packet.6,
+        Some(count as u16),
+    )
 }
 
 fn generate_key(packet: &(String, String, u16, u16, u8, u16, u8, Option<u16>), keys: &Vec<String>) -> String {
