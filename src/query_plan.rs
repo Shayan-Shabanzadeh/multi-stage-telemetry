@@ -18,6 +18,7 @@ pub enum Operation {
     },
     FilterResult(String),
     Distinct(Vec<String>),
+    Join(Box<QueryPlan>, Vec<String>),
 }
 
 pub enum ReduceType {
