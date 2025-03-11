@@ -6,7 +6,6 @@ use sysinfo::{System, SystemExt};
 use crate::sketch::Sketch;
 use crate::query_plan::{QueryPlan};
 use crate::query_executor::execute_query;
-use crate::packet_info::PacketInfo;
 use pcap::Capture;
 use pnet::packet::{Packet, ethernet::EthernetPacket, ipv4::Ipv4Packet, tcp::TcpPacket};
 use std::collections::HashMap;
@@ -21,22 +20,22 @@ fn initialize_log_file(path: &str) -> std::fs::File {
         .expect("Cannot open log file")
 }
 
-/// Extracts a tuple from the packet with fields: (src_ip, dst_ip, src_port, dst_port, tcp_flags, protocol)
-fn extract_packet_tuple(packet: &pcap::Packet) -> Option<PacketInfo> {
+/// Extracts a tuple from the packet with fields: (src_ip, dst_ip, src_port, dst_port, tcp_flags, total_len, protocol, dns_ns_type)
+fn extract_packet_tuple(packet: &pcap::Packet) -> Option<(String, String, u16, u16, u8, u16, u8, Option<u16>)> {
     let ethernet = EthernetPacket::new(packet.data)?;
     let ipv4 = Ipv4Packet::new(ethernet.payload())?;
 
     if ipv4.get_next_level_protocol() == pnet::packet::ip::IpNextHeaderProtocols::Tcp {
-        TcpPacket::new(ipv4.payload()).map(|tcp| PacketInfo {
-            src_ip: ipv4.get_source().to_string(),
-            dst_ip: ipv4.get_destination().to_string(),
-            src_port: tcp.get_source(),
-            dst_port: tcp.get_destination(),
-            tcp_flags: tcp.get_flags(),
-            total_len: ipv4.get_total_length(),
-            protocol: ipv4.get_next_level_protocol().0,
-            dns_ns_type: None, // Initialize with None
-        })
+        TcpPacket::new(ipv4.payload()).map(|tcp| (
+            ipv4.get_source().to_string(),
+            ipv4.get_destination().to_string(),
+            tcp.get_source(),
+            tcp.get_destination(),
+            tcp.get_flags(),
+            ipv4.get_total_length(),
+            ipv4.get_next_level_protocol().0,
+            None, // Initialize dns_ns_type with None
+        ))
     } else {
         None
     }
@@ -193,14 +192,14 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
     let packets_per_second = total_packets as f64 / elapsed_seconds;
     let average_packets_per_epoch = total_packets as f64 / epoch_count as f64;
     sys.refresh_memory(); // Refresh memory usage one last time
-    let peak_memory = get_process_memory_usage(); // Capture peak memory usage of the process
+    let peak_memory = get_process_memory_usage();
 
     println!("Finished packet processing.");
     println!("Total packets processed: {}", total_packets);
     println!("Elapsed time: {:.2} seconds", elapsed_seconds);
     println!("Average packets per second: {:.2}", packets_per_second);
     println!("Average packets per epoch: {:.2}", average_packets_per_epoch);
-    println!("Peak memory usage: {} KB", peak_memory); // ✅ Peak memory
+    println!("Peak memory usage: {} KB", peak_memory);
 
     if let Err(e) = writeln!(log_file, "\n=== PERFORMANCE METRICS ===\nTotal packets processed: {}\nElapsed time: {:.2} seconds\nAverage packets per second: {:.2}\nAverage packets per epoch: {:.2}\nPeak memory usage: {} KB\n",
         total_packets, elapsed_seconds, packets_per_second, average_packets_per_epoch, peak_memory) {

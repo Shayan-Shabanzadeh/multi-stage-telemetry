@@ -1,9 +1,8 @@
 use crate::query_plan::{QueryPlan, Operation, Field, ReduceType};
-use crate::packet_info::PacketInfo;
 use crate::sketch::Sketch;
 use std::collections::{HashMap, HashSet};
 
-pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sketches: &mut HashMap<String, Sketch>, ground_truth: &mut HashMap<String, u64>) {
+pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u16, u8, Option<u16>), threshold: usize, sketches: &mut HashMap<String, Sketch>, ground_truth: &mut HashMap<String, u64>) {
     let mut current_packet = Some(packet);
     let mut seen = HashSet::new();
 
@@ -14,13 +13,13 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
                     let mut pass = true;
                     for (field, value) in conditions {
                         pass &= match field {
-                            Field::SourceIp => &p.src_ip == value,
-                            Field::DestIp => &p.dst_ip == value,
-                            Field::SourcePort => p.src_port.to_string() == *value,
-                            Field::DestPort => p.dst_port.to_string() == *value,
-                            Field::TcpFlag => p.tcp_flags.to_string() == *value,
-                            Field::Protocol => p.protocol.to_string() == *value,
-                            Field::DnsNsType => p.dns_ns_type.map_or(false, |v| v.to_string() == *value),
+                            Field::SourceIp => &p.0 == value,
+                            Field::DestIp => &p.1 == value,
+                            Field::SourcePort => p.2.to_string() == *value,
+                            Field::DestPort => p.3.to_string() == *value,
+                            Field::TcpFlag => p.4.to_string() == *value,
+                            Field::Protocol => p.6.to_string() == *value,
+                            Field::DnsNsType => p.7.map_or(false, |v| v.to_string() == *value),
                         };
                         if !pass {
                             break;
@@ -35,16 +34,16 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
             }
             Operation::Map(_expr) => {
                 if let Some(ref p) = current_packet {
-                    current_packet = Some(PacketInfo {
-                        src_ip: p.src_ip.clone(),
-                        dst_ip: p.dst_ip.clone(),
-                        src_port: p.src_port,
-                        dst_port: p.dst_port,
-                        tcp_flags: p.tcp_flags,
-                        total_len: p.total_len,
-                        protocol: p.protocol,
-                        dns_ns_type: p.dns_ns_type,
-                    });
+                    current_packet = Some((
+                        p.0.clone(),
+                        p.1.clone(),
+                        p.2,
+                        p.3,
+                        p.4,
+                        p.5,
+                        p.6,
+                        p.7,
+                    ));
                 }
             }
             Operation::Reduce { keys, function: _, reduce_type } => {
@@ -82,9 +81,9 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
             }
             Operation::FilterResult(_expr) => {
                 if let Some(ref p) = current_packet {
-                    let count = sketches.values().map(|sketch| sketch.estimate(&p.src_ip)).max().unwrap_or(0);
+                    let count = sketches.values().map(|sketch| sketch.estimate(&p.0)).max().unwrap_or(0);
                     if count >= threshold as u64 {
-                        // println!("Packet passed filter result: src_ip: {}, count: {}", p.src_ip, count);
+                        // println!("Packet passed filter result: src_ip: {}, count: {}", p.0, count);
                     } else {
                         current_packet = None;
                     }
@@ -104,20 +103,31 @@ pub fn execute_query(query: &QueryPlan, packet: PacketInfo, threshold: usize, sk
     }
 }
 
-fn generate_key(packet: &PacketInfo, keys: &Vec<String>) -> String {
+fn generate_key(packet: &(String, String, u16, u16, u8, u16, u8, Option<u16>), keys: &Vec<String>) -> String {
     keys.iter()
-        .map(|key| packet.get(key).unwrap_or_else(|| "".to_string()))
+        .map(|key| match key.as_str() {
+            "src_ip" => packet.0.clone(),
+            "dst_ip" => packet.1.clone(),
+            "src_port" => packet.2.to_string(),
+            "dst_port" => packet.3.to_string(),
+            "tcp_flags" => packet.4.to_string(),
+            "total_len" => packet.5.to_string(),
+            "protocol" => packet.6.to_string(),
+            "dns_ns_type" => packet.7.map_or("".to_string(), |v| v.to_string()),
+            _ => "".to_string(),
+        })
         .collect::<Vec<String>>()
         .join("_")
 }
 
-fn extract_key(packet: &PacketInfo, keys: &Vec<String>) -> Vec<u8> {
+fn extract_key(packet: &(String, String, u16, u16, u8, u16, u8, Option<u16>), keys: &Vec<String>) -> Vec<u8> {
     keys.iter().flat_map(|key| match key.as_str() {
-        "src_ip" => packet.src_ip.as_bytes().to_vec(),
-        "dst_ip" => packet.dst_ip.as_bytes().to_vec(),
-        "src_port" => packet.src_port.to_be_bytes().to_vec(),
-        "dst_port" => packet.dst_port.to_be_bytes().to_vec(),
-        "total_len" => packet.total_len.to_be_bytes().to_vec(),
+        "src_ip" => packet.0.as_bytes().to_vec(),
+        "dst_ip" => packet.1.as_bytes().to_vec(),
+        "src_port" => packet.2.to_be_bytes().to_vec(),
+        "dst_port" => packet.3.to_be_bytes().to_vec(),
+        "total_len" => packet.5.to_be_bytes().to_vec(),
+        "dns_ns_type" => packet.7.map_or(vec![], |v| v.to_be_bytes().to_vec()),
         _ => vec![],
     }).collect()
 }
