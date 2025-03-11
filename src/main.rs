@@ -1,7 +1,6 @@
 mod sketch;
 mod query_plan;
 mod query_executor;
-mod packet_info;
 mod queries;
 mod config;
 mod pcap_processor;
