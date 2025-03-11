@@ -32,18 +32,12 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
                     }
                 }
             }
-            Operation::Map(_expr) => {
+            Operation::Map(expr) => {
                 if let Some(ref p) = current_packet {
-                    current_packet = Some((
-                        p.0.clone(),
-                        p.1.clone(),
-                        p.2,
-                        p.3,
-                        p.4,
-                        p.5,
-                        p.6,
-                        p.7,
-                    ));
+                    println!("Before Map: {:?}", p);
+                    let new_tuple = map_packet(p, expr);
+                    println!("After Map: {:?}", new_tuple);
+                    current_packet = Some(new_tuple);
                 }
             }
             Operation::Reduce { keys, function: _, reduce_type } => {
@@ -101,6 +95,32 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
             }
         }
     }
+}
+
+fn map_packet(packet: &(String, String, u16, u16, u8, u16, u8, Option<u16>), expr: &str) -> (String, String, u16, u16, u8, u16, u8, Option<u16>) {
+    // Parse the expression and create a new tuple based on the expression
+    // Example expressions:
+    // "(p.dst_ip, 1)"
+    // "(p.dst_ip, p.src_ip)"
+    // "(p.src_ip)"
+    let parts: Vec<&str> = expr.trim_matches(|c| c == '(' || c == ')').split(',').map(|s| s.trim()).collect();
+    let mut new_tuple = ("".to_string(), "".to_string(), 0, 0, 0, 0, 0, None);
+
+    for (i, part) in parts.iter().enumerate() {
+        match *part {
+            "p.src_ip" => new_tuple.0 = packet.0.clone(),
+            "p.dst_ip" => new_tuple.1 = packet.1.clone(),
+            "p.src_port" => new_tuple.2 = packet.2,
+            "p.dst_port" => new_tuple.3 = packet.3,
+            "p.tcp_flags" => new_tuple.4 = packet.4,
+            "p.total_len" => new_tuple.5 = packet.5,
+            "p.protocol" => new_tuple.6 = packet.6,
+            "1" => new_tuple.7 = Some(1),
+            _ => {}
+        }
+    }
+
+    new_tuple
 }
 
 fn generate_key(packet: &(String, String, u16, u16, u8, u16, u8, Option<u16>), keys: &Vec<String>) -> String {
