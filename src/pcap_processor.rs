@@ -48,14 +48,26 @@ fn get_process_memory_usage() -> u64 {
     process.stat.vsize / 1024 // Convert from bytes to KB
 }
 
-/// Prints and logs the epoch summary with all src_ip counts exceeding the threshold.
+/// Generates a key for the flow based on the non-zero and non-empty fields of the tuple.
+fn generate_flow_key(packet: &(String, String, u16, u16, u8, u16, u8, Option<u16>)) -> (String, String, u16, u16, u8, u16, u8) {
+    (
+        packet.0.clone(),
+        packet.1.clone(),
+        packet.2,
+        packet.3,
+        packet.4,
+        packet.5,
+        packet.6,
+    )
+}
+
+/// Prints and logs the epoch summary with all flow keys and their counts exceeding the threshold.
 fn print_epoch_summary(
     timestamp: u64,
     epoch_packets: usize,
     total_packets: usize,
     threshold: usize,
-    ground_truth: &HashMap<String, u64>,
-    sketches: &HashMap<String, Sketch>,
+    flow_counts: &HashMap<(String, String, u16, u16, u8, u16, u8), u64>,
     log_file: &mut std::fs::File,
 ) {
     println!("Printing epoch summary...");
@@ -64,19 +76,16 @@ fn print_epoch_summary(
         timestamp, epoch_packets, total_packets
     );
 
-    let mut valid_entries: Vec<(String, u64, u64)> = ground_truth.iter()
+    let mut valid_entries: Vec<((String, String, u16, u16, u8, u16, u8), u64)> = flow_counts.iter()
         .filter(|&(_, &count)| count > threshold as u64)
-        .map(|(src_ip, &real_count)| {
-            let estimated_count = sketches.values().map(|sketch| sketch.estimate(src_ip)).max().unwrap_or(0);
-            (src_ip.clone(), real_count, estimated_count)
-        })
+        .map(|(flow_key, &count)| (flow_key.clone(), count))
         .collect();
 
-    // Sort by estimated count in descending order
-    valid_entries.sort_by(|a, b| b.2.cmp(&a.2));
+    // Sort by count in descending order
+    valid_entries.sort_by(|a, b| b.1.cmp(&a.1));
 
-    for (src_ip, real_count, estimated_count) in &valid_entries {
-        let entry = format!("(src_ip: {}, real_count: {}, estimated_count: {})", src_ip, real_count, estimated_count);
+    for (flow_key, count) in &valid_entries {
+        let entry = format!("(flow_key: {:?}, count: {})", flow_key, count);
         println!("{}", entry); // Debugging statement
         summary.push_str(&format!("{}\n", entry));
     }
@@ -101,6 +110,7 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
     let mut log_file = initialize_log_file("telemetry_log.txt");
     let mut memory_log_file = initialize_log_file("memory_log.txt"); // New log file for memory usage
     let mut ground_truth: HashMap<String, u64> = HashMap::new();
+    let mut flow_counts: HashMap<(String, String, u16, u16, u8, u16, u8), u64> = HashMap::new(); // Map to store flow counts
 
     let mut total_packets = 0;
     let mut epoch_packets = 0;
@@ -124,7 +134,12 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
         current_epoch_start.get_or_insert(packet_timestamp);
 
         if let Some(packet_info) = extract_packet_tuple(&packet) {
-            execute_query(&query, packet_info, threshold, &mut sketches, &mut ground_truth);
+            let passed_flow = execute_query(&query, packet_info, threshold, &mut sketches, &mut ground_truth);
+            // println!("{:?}", passed_flow);
+            if let Some(flow) = passed_flow {
+                let flow_key = generate_flow_key(&flow);
+                *flow_counts.entry(flow_key).or_insert(0) += 1;
+            }
         }
 
         total_packets += 1;
@@ -143,8 +158,7 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
                 epoch_packets,
                 total_packets,
                 threshold,
-                &ground_truth,
-                &sketches,
+                &flow_counts,
                 &mut log_file,
             );
 
@@ -155,6 +169,7 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
 
             sketches.values_mut().for_each(|sketch| sketch.clear());
             ground_truth.clear();
+            flow_counts.clear(); // Clear the flow counts for the next epoch
             epoch_packets = 0;
             current_epoch_start = Some(packet_timestamp);
         }
@@ -174,8 +189,7 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
                 epoch_packets,
                 total_packets,
                 threshold,
-                &ground_truth,
-                &sketches,
+                &flow_counts,
                 &mut log_file,
             );
 

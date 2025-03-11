@@ -2,7 +2,7 @@ use crate::query_plan::{QueryPlan, Operation, Field, ReduceType};
 use crate::sketch::Sketch;
 use std::collections::{HashMap, HashSet};
 
-pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u16, u8, Option<u16>), threshold: usize, sketches: &mut HashMap<String, Sketch>, ground_truth: &mut HashMap<String, u64>) {
+pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u16, u8, Option<u16>), threshold: usize, sketches: &mut HashMap<String, Sketch>, ground_truth: &mut HashMap<String, u64>) -> Option<(String, String, u16, u16, u8, u16, u8, Option<u16>)> {
     let mut current_packet = Some(packet);
     let mut seen = HashSet::new();
 
@@ -34,7 +34,9 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
             }
             Operation::Map(expr) => {
                 if let Some(ref p) = current_packet {
+                    // println!("Before Map: {:?}", p);
                     let new_tuple = map_packet(p, expr);
+                    // println!("After Map: {:?}", new_tuple);
                     current_packet = Some(new_tuple);
                 }
             }
@@ -57,7 +59,7 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
                                 sketch.increment(&key, count as u64);
                             } else {
                                 eprintln!("Error: Count value not found in tuple");
-                                return;
+                                return None;
                             }
 
                             // Update the tuple with the new count
@@ -78,7 +80,7 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
                                 sketch.increment(&key, count as u64);
                             } else {
                                 eprintln!("Error: Count value not found in tuple");
-                                return;
+                                return None;
                             }
 
                             // Update the tuple with the new count
@@ -99,7 +101,7 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
                                 sketch.increment(&key, count as u64);
                             } else {
                                 eprintln!("Error: Count value not found in tuple");
-                                return;
+                                return None;
                             }
 
                             // Update the tuple with the new count
@@ -113,14 +115,15 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
             Operation::FilterResult(_expr) => {
                 if let Some(ref p) = current_packet {
                     if let Some(count) = p.7 {
+                        // println!("FilterResult: {:?} and count: {}", p, count);
                         if count >= threshold as u16 {
-                            println!("flows passed filter result: {:?}", p);
+                            // println!("Packet passed filter result: {:?}", p);
                         } else {
                             current_packet = None;
                         }
                     } else {
                         eprintln!("Error: Count value not found in tuple");
-                        return;
+                        return None;
                     }
                 }
             }
@@ -136,6 +139,8 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
             }
         }
     }
+
+    current_packet
 }
 
 fn map_packet(packet: &(String, String, u16, u16, u8, u16, u8, Option<u16>), expr: &str) -> (String, String, u16, u16, u8, u16, u8, Option<u16>) {
