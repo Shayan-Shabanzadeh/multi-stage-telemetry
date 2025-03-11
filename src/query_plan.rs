@@ -16,7 +16,7 @@ pub enum Operation {
         function: String,
         reduce_type: ReduceType,
     },
-    FilterResult(String),
+    FilterResult { threshold: u64 }, 
     Distinct(Vec<String>),
     Join(Box<QueryPlan>, Vec<String>),
 }

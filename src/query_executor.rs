@@ -1,8 +1,9 @@
 use crate::query_plan::{QueryPlan, Operation, Field, ReduceType};
 use crate::sketch::Sketch;
 use std::collections::{HashMap, HashSet};
+use std::io::Write;
 
-pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u16, u8, Option<u16>), threshold: usize, sketches: &mut HashMap<String, Sketch>, ground_truth: &mut HashMap<String, u64>) -> Option<(String, String, u16, u16, u8, u16, u8, Option<u16>)> {
+pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u16, u8, Option<u16>), sketches: &mut HashMap<String, Sketch>, ground_truth: &mut HashMap<String, u64>) -> Option<(String, String, u16, u16, u8, u16, u8, Option<u16>)> {
     let mut current_packet = Some(packet);
     let mut seen = HashSet::new();
 
@@ -132,11 +133,11 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
                     }
                 }
             }
-            Operation::FilterResult(_expr) => {
+            Operation::FilterResult { threshold } => {
                 if let Some(ref p) = current_packet {
                     if let Some(count) = p.7 {
                         // println!("FilterResult: {:?} and count: {}", p, count);
-                        if count >= threshold as u16 {
+                        if count >= *threshold as u16 {
                             // println!("Packet passed filter result: {:?}", p);
                         } else {
                             current_packet = None;
@@ -173,6 +174,53 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
     }
 
     current_packet
+}
+
+pub fn summarize_epoch(
+    query: &QueryPlan,
+    timestamp: u64,
+    epoch_packets: usize,
+    total_packets: usize,
+    flow_counts: &HashMap<(String, String, u16, u16, u8, u16, u8), u64>,
+    log_file: &mut std::fs::File,
+) {
+    println!("Printing epoch summary...");
+    let mut summary = format!(
+        "Epoch end timestamp,Packets processed this epoch,Total packets processed\n{}, {}, {}\n",
+        timestamp, epoch_packets, total_packets
+    );
+
+    let mut valid_entries: Vec<((String, String, u16, u16, u8, u16, u8), u64)> = flow_counts.iter()
+        .filter(|&(_, &count)| {
+            query.operations.iter().any(|op| {
+                if let Operation::FilterResult { threshold } = op {
+                    count > *threshold as u64
+                } else {
+                    false
+                }
+            })
+        })
+        .map(|(flow_key, &count)| (flow_key.clone(), count))
+        .collect();
+
+    // Sort by count in descending order
+    valid_entries.sort_by(|a, b| b.1.cmp(&a.1));
+
+    summary.push_str("Flow key,Count\n");
+    for (flow_key, count) in &valid_entries {
+        let entry = format!("{:?},{}\n", flow_key, count);
+        summary.push_str(&entry);
+    }
+
+    if valid_entries.is_empty() {
+        summary.push_str("No entries exceeded the threshold.\n");
+    }
+
+    if let Err(e) = writeln!(log_file, "{}", summary.trim_end()) {
+        eprintln!("Failed to write to log file: {}", e);
+    } else {
+        println!("Successfully wrote to log file."); // Debugging statement
+    }
 }
 
 fn map_packet(packet: &(String, String, u16, u16, u8, u16, u8, Option<u16>), expr: &str) -> (String, String, u16, u16, u8, u16, u8, Option<u16>) {

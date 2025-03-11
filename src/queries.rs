@@ -16,7 +16,7 @@ pub fn query_1() -> QueryPlan {
                 // reduce_type: ReduceType::ElasticReduce { depth: 4, width: 1024, seed: 42 },
 
             },
-            Operation::FilterResult("count > Th".to_string()),
+            Operation::FilterResult { threshold: 1000 },
         ],
     }
 }
@@ -35,7 +35,7 @@ pub fn query_2() -> QueryPlan {
                 function: "sum".to_string(),
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
             },
-            Operation::FilterResult("count >= 40".to_string()),
+            Operation::FilterResult { threshold: 1000 },
             Operation::Map("(p.dst_ip)".to_string()),
         ],
     }
@@ -54,7 +54,7 @@ pub fn query_3() -> QueryPlan {
                 function: "sum".to_string(),
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
             },
-            Operation::FilterResult("count >= 40".to_string()),
+            Operation::FilterResult { threshold: 1000 },
             Operation::Map("(p.src_ip)".to_string()),
         ],
     }
@@ -76,7 +76,7 @@ pub fn query_4() -> QueryPlan {
                 // reduce_type: ReduceType::FCMReduce { depth: 4, width: 1024, seed: 42 },
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
             },
-            Operation::FilterResult("count >= T".to_string()),
+            Operation::FilterResult { threshold: 1000 },
             Operation::Map("(p.src_ip)".to_string()),
         ],
     }
@@ -198,7 +198,7 @@ pub fn query_11() -> QueryPlan {
                 function: "sum".to_string(),
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
             },
-            Operation::FilterResult("count >= 40".to_string()),
+            Operation::FilterResult { threshold: 1000 },
             Operation::Map("(p.dst_ip)".to_string()),
         ],
     }

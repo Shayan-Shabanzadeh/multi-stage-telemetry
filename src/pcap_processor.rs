@@ -4,8 +4,8 @@ use std::io::Write;
 use std::time::Instant;
 use sysinfo::{System, SystemExt};
 use crate::sketch::Sketch;
-use crate::query_plan::{QueryPlan};
-use crate::query_executor::execute_query;
+use crate::query_plan::QueryPlan;
+use crate::query_executor::{execute_query, summarize_epoch};
 use pcap::Capture;
 use pnet::packet::{Packet, ethernet::EthernetPacket, ipv4::Ipv4Packet, tcp::TcpPacket};
 use std::collections::HashMap;
@@ -61,49 +61,9 @@ fn generate_flow_key(packet: &(String, String, u16, u16, u8, u16, u8, Option<u16
     )
 }
 
-/// Prints and logs the epoch summary with all flow keys and their counts exceeding the threshold.
-fn print_epoch_summary(
-    timestamp: u64,
-    epoch_packets: usize,
-    total_packets: usize,
-    threshold: usize,
-    flow_counts: &HashMap<(String, String, u16, u16, u8, u16, u8), u64>,
-    log_file: &mut std::fs::File,
-) {
-    println!("Printing epoch summary...");
-    let mut summary = format!(
-        "Epoch end timestamp,Packets processed this epoch,Total packets processed\n{}, {}, {}\n",
-        timestamp, epoch_packets, total_packets
-    );
-
-    let mut valid_entries: Vec<((String, String, u16, u16, u8, u16, u8), u64)> = flow_counts.iter()
-        .filter(|&(_, &count)| count > threshold as u64)
-        .map(|(flow_key, &count)| (flow_key.clone(), count))
-        .collect();
-
-    // Sort by count in descending order
-    valid_entries.sort_by(|a, b| b.1.cmp(&a.1));
-
-    summary.push_str("Flow key,Count\n");
-    for (flow_key, count) in &valid_entries {
-        let entry = format!("{:?},{}\n", flow_key, count);
-        summary.push_str(&entry);
-    }
-
-    if valid_entries.is_empty() {
-        summary.push_str("No entries exceeded the threshold.\n");
-    }
-
-    if let Err(e) = writeln!(log_file, "{}", summary.trim_end()) {
-        eprintln!("Failed to write to log file: {}", e);
-    } else {
-        println!("Successfully wrote to log file."); // Debugging statement
-    }
-}
-
 /// Processes the PCAP file and executes the specified query in a streaming manner.
 /// Runs the query line-rate, printing results as soon as conditions are met and providing epoch summaries.
-pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: QueryPlan) {
+pub fn process_pcap(file_path: &str, epoch_size: u64, query: QueryPlan) {
     println!("Starting packet processing...");
     let mut cap = Capture::from_file(file_path).expect("Failed to open PCAP file");
     let mut sketches: HashMap<String, Sketch> = HashMap::new();
@@ -134,7 +94,7 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
         current_epoch_start.get_or_insert(packet_timestamp);
 
         if let Some(packet_info) = extract_packet_tuple(&packet) {
-            let passed_flow = execute_query(&query, packet_info, threshold, &mut sketches, &mut ground_truth);
+            let passed_flow = execute_query(&query, packet_info, &mut sketches, &mut ground_truth);
             // println!("{:?}", passed_flow);
             if let Some(flow) = passed_flow {
                 let flow_key = generate_flow_key(&flow);
@@ -153,11 +113,11 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
             let total_memory = sys.total_memory();
             let available_memory = sys.available_memory();
 
-            print_epoch_summary(
+            summarize_epoch(
+                &query,
                 packet_timestamp,
                 epoch_packets,
                 total_packets,
-                threshold,
                 &flow_counts,
                 &mut log_file,
             );
@@ -184,11 +144,11 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
             let total_memory = sys.total_memory();
             let available_memory = sys.available_memory();
 
-            print_epoch_summary(
+            summarize_epoch(
+                &query,
                 epoch_start,
                 epoch_packets,
                 total_packets,
-                threshold,
                 &flow_counts,
                 &mut log_file,
             );
