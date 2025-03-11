@@ -34,17 +34,14 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
             }
             Operation::Map(expr) => {
                 if let Some(ref p) = current_packet {
-                    // println!("Before Map: {:?}", p);
                     let new_tuple = map_packet(p, expr);
-                    // println!("After Map: {:?}", new_tuple);
                     current_packet = Some(new_tuple);
                 }
             }
             Operation::Reduce { keys, function: _, reduce_type } => {
                 if let Some(ref p) = current_packet {
                     let key = generate_key(p, keys);
-                    // println!("Before reduce: {:?}", p);
-                    // println!("Key: {:?}", key);
+
                     match reduce_type {
                         ReduceType::CMReduce { memory_in_bytes, depth, seed } => {
                             let sketch_key = format!("CMSketch_{}_{}", memory_in_bytes, depth);
@@ -66,7 +63,6 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
                             // Update the tuple with the new count
                             let new_count = current_count + p.7.unwrap() as u64;
                             current_packet = Some(update_tuple_with_count(p, new_count));
-                            // println!("After reduce: {:?}", current_packet);
                         }
                         ReduceType::FCMReduce { depth, width, seed } => {
                             let sketch_key = format!("FCMSketch_{}_{}", depth, width);
@@ -116,12 +112,15 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
             }
             Operation::FilterResult(_expr) => {
                 if let Some(ref p) = current_packet {
-                    let count = sketches.values().map(|sketch| sketch.estimate(&p.0)).max().unwrap_or(0);
-                    // println!("FilterResult: {:?} and count :{}", p , count);
-                    if count >= threshold as u64 {
-                        // println!("Packet passed filter result: src_ip: {}, count: {}", p.0, count);
+                    if let Some(count) = p.7 {
+                        if count >= threshold as u16 {
+                            println!("flows passed filter result: {:?}", p);
+                        } else {
+                            current_packet = None;
+                        }
                     } else {
-                        current_packet = None;
+                        eprintln!("Error: Count value not found in tuple");
+                        return;
                     }
                 }
             }
