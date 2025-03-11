@@ -59,7 +59,7 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
                             if let Some(count) = p.7 {
                                 sketch.increment(&key, count as u64);
                             } else {
-                                eprintln!("Error: Count value not found in tuple");
+                                eprintln!("Error reduce: Count value not found in tuple");
                                 return None;
                             }
 
@@ -80,7 +80,7 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
                             if let Some(count) = p.7 {
                                 sketch.increment(&key, count as u64);
                             } else {
-                                eprintln!("Error: Count value not found in tuple");
+                                eprintln!("Error reduce: Count value not found in tuple");
                                 return None;
                             }
 
@@ -101,7 +101,7 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
                             if let Some(count) = p.7 {
                                 sketch.increment(&key, count as u64);
                             } else {
-                                eprintln!("Error: Count value not found in tuple");
+                                eprintln!("Error reduce: Count value not found in tuple");
                                 return None;
                             }
 
@@ -122,7 +122,7 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
                             if let Some(count) = p.7 {
                                 sketch.increment(&key, count as u64);
                             } else {
-                                eprintln!("Error: Count value not found in tuple");
+                                eprintln!("Error reduce: Count value not found in tuple");
                                 return None;
                             }
 
@@ -143,7 +143,7 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
                             current_packet = None;
                         }
                     } else {
-                        eprintln!("Error: Count value not found in tuple");
+                        eprintln!("Error filter result: Count value not found in tuple");
                         return None;
                     }
                 }
@@ -242,7 +242,16 @@ fn map_packet(packet: &(String, String, u16, u16, u8, u16, u8, Option<u16>), exp
             "p.total_len" => new_tuple.5 = packet.5,
             "p.protocol" => new_tuple.6 = packet.6,
             "1" => new_tuple.7 = Some(1),
-            _ => {}
+            _ => {
+                if part.starts_with("count = ") {
+                    let value = part.trim_start_matches("count = ").trim();
+                    new_tuple.7 = match value {
+                        "1" => Some(1),
+                        "p.total_len" => Some(packet.5 as u16),
+                        _ => None,
+                    };
+                }
+            }
         }
     }
 
