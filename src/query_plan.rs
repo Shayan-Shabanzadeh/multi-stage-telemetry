@@ -24,6 +24,7 @@ pub enum ReduceType {
     CMReduce { memory_in_bytes: usize, depth: usize, seed: u64 },
     FCMReduce { depth: usize, width: usize, seed: u64 },
     ElasticReduce { depth: usize, width: usize, seed: u64 },
+    DeterministicReduce,
 }
 
 pub struct QueryPlan {

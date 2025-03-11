@@ -1,11 +1,13 @@
 use crate::cm_sketch::CMSketch;
 use crate::fcm_sketch::FCMSketch;
 use crate::elastic_sketch::ElasticSketch;
+use crate::deterministic_sketch::DeterministicSketch;
 
 pub enum Sketch {
     CMSketch(CMSketch),
     FCMSketch(FCMSketch),
     ElasticSketch(ElasticSketch),
+    DeterministicSketch(DeterministicSketch),
 }
 
 impl Sketch {
@@ -21,11 +23,16 @@ impl Sketch {
         Sketch::ElasticSketch(ElasticSketch::new(depth, width, seed))
     }
 
+    pub fn new_deterministic_sketch() -> Self {
+        Sketch::DeterministicSketch(DeterministicSketch::new())
+    }
+
     pub fn increment(&mut self, item: &str, count: u64) {
         match self {
             Sketch::CMSketch(sketch) => sketch.insert(item.as_bytes(), count as i32),
             Sketch::FCMSketch(sketch) => sketch.insert(item.as_bytes(), count as u32),
             Sketch::ElasticSketch(sketch) => sketch.insert(item.as_bytes(), count as u32),
+            Sketch::DeterministicSketch(sketch) => sketch.insert(item, count),
         }
     }
 
@@ -34,6 +41,7 @@ impl Sketch {
             Sketch::CMSketch(sketch) => sketch.query(item.as_bytes()) as u64,
             Sketch::FCMSketch(sketch) => sketch.query(item.as_bytes()) as u64,
             Sketch::ElasticSketch(sketch) => sketch.query(item.as_bytes()) as u64,
+            Sketch::DeterministicSketch(sketch) => sketch.query(item),
         }
     }
 
@@ -45,6 +53,7 @@ impl Sketch {
                 sketch.light_counters.iter_mut().for_each(|row| row.fill(0));
                 sketch.heavy_counters.fill(0);
             }
+            Sketch::DeterministicSketch(sketch) => sketch.clear(),
         }
     }
 }

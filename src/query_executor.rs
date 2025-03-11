@@ -108,7 +108,27 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
                             let new_count = current_count + p.7.unwrap() as u64;
                             current_packet = Some(update_tuple_with_count(p, new_count));
                         }
-                        // Add other reduce types here in the future
+                        ReduceType::DeterministicReduce => {
+                            let sketch_key = "DeterministicSketch".to_string();
+                            let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
+                                Sketch::new_deterministic_sketch()
+                            });
+
+                            // Get the current count from the sketch
+                            let current_count = sketch.estimate(&key);
+
+                            // Update the sketch with the new count
+                            if let Some(count) = p.7 {
+                                sketch.increment(&key, count as u64);
+                            } else {
+                                eprintln!("Error: Count value not found in tuple");
+                                return None;
+                            }
+
+                            // Update the tuple with the new count
+                            let new_count = current_count + p.7.unwrap() as u64;
+                            current_packet = Some(update_tuple_with_count(p, new_count));
+                        }
                     }
                 }
             }

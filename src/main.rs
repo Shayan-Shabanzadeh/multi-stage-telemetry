@@ -7,6 +7,7 @@ mod pcap_processor;
 mod cm_sketch;
 mod fcm_sketch;
 mod elastic_sketch;
+mod deterministic_sketch;
 
 use std::env;
 use pcap_processor::process_pcap;
