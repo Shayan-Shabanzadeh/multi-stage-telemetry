@@ -14,9 +14,10 @@ pub fn query_1() -> QueryPlan {
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
                 // reduce_type: ReduceType::FCMReduce { depth: 4, width: 1024, seed: 42 },
                 // reduce_type: ReduceType::ElasticReduce { depth: 4, width: 1024, seed: 42 },
+                index: 8,
 
             },
-            Operation::FilterResult { threshold: 100 },
+            Operation::FilterResult { threshold: 100 , index: 8 },
         ],
     }
 }
@@ -34,8 +35,9 @@ pub fn query_2() -> QueryPlan {
                 keys: vec!["dst_ip".to_string(), "total_len".to_string()],
                 function: "sum".to_string(),
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+                index: 8,
             },
-            Operation::FilterResult { threshold: 8000 },
+            Operation::FilterResult { threshold: 8000  , index: 8 },
             Operation::Map("(p.dst_ip)".to_string()),
         ],
     }
@@ -53,8 +55,9 @@ pub fn query_3() -> QueryPlan {
                 keys: vec!["src_ip".to_string()],
                 function: "sum".to_string(),
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+                index: 7,
             },
-            Operation::FilterResult { threshold: 1000 },
+            Operation::FilterResult { threshold: 1000  , index: 8 },
             Operation::Map("(p.src_ip)".to_string()),
         ],
     }
@@ -75,8 +78,9 @@ pub fn query_4() -> QueryPlan {
                 function: "sum".to_string(),
                 // reduce_type: ReduceType::FCMReduce { depth: 4, width: 1024, seed: 42 },
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+                index: 7,
             },
-            Operation::FilterResult { threshold: 1000 },
+            Operation::FilterResult { threshold: 1000 , index: 8 },
             Operation::Map("(p.src_ip)".to_string()),
         ],
     }
@@ -92,8 +96,9 @@ pub fn query_5() -> QueryPlan {
                 keys: vec!["dst_ip".to_string(), "src_ip".to_string()],
                 function: "sum".to_string(),
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+                index: 7,
             },
-            Operation::FilterResult { threshold: 1000 },
+            Operation::FilterResult { threshold: 1000 , index: 8 },
             Operation::Map("(p.dst_ip)".to_string()),
         ],
     }
@@ -111,8 +116,9 @@ pub fn query_8_1() -> QueryPlan {
                 keys: vec!["dst_ip".to_string()],
                 function: "sum".to_string(),
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+                index: 7,
             },
-            Operation::FilterResult { threshold: 500 },
+            Operation::FilterResult { threshold: 500 , index: 8 },
         ],
     }
 }
@@ -131,8 +137,9 @@ pub fn query_8() -> QueryPlan {
                 keys: vec!["dst_ip".to_string()],
                 function: "sum".to_string(),
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+                index: 8,
             },
-            Operation::FilterResult { threshold: 5 },
+            Operation::FilterResult { threshold: 5 , index: 8 },
         ],
     };
 
@@ -144,8 +151,9 @@ pub fn query_8() -> QueryPlan {
                 keys: vec!["dst_ip".to_string()],
                 function: "sum".to_string(),
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+                index: 8,
             },
-            Operation::FilterResult { threshold: 500 },
+            Operation::FilterResult { threshold: 500 ,index: 8 },
         ],
     };
 
@@ -156,9 +164,9 @@ pub fn query_8() -> QueryPlan {
                 right_query: Box::new(n_conns),
                 join_keys: vec!["dst_ip".to_string()],
             },
-            Operation::Map("(p.dst_ip, p.count1, p.total_len)".to_string()),
-            Operation::Map("(p.dst_ip, p.count1 / p.total_len)".to_string()),
-            Operation::FilterResult { threshold: 90 },
+            Operation::Map("(p.dst_ip, p.count1, p.count2)".to_string()),
+            Operation::Map("(p.dst_ip, p.count1 / p.count2)".to_string()),
+            Operation::FilterResult { threshold: 90  , index: 8},
             Operation::Map("(p.dst_ip)".to_string()),
         ],
     }
@@ -179,8 +187,9 @@ pub fn query_11() -> QueryPlan {
                 keys: vec!["dst_ip".to_string()],
                 function: "sum".to_string(),
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+                index: 7,
             },
-            Operation::FilterResult { threshold: 1000 },
+            Operation::FilterResult { threshold: 1000 ,index: 8  },
             Operation::Map("(p.dst_ip)".to_string()),
         ],
     }
