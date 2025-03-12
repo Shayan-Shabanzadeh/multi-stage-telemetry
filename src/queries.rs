@@ -102,6 +102,24 @@ pub fn query_5() -> QueryPlan {
 
 /// Query 8: Detect Slowloris attacks
 /// Hosts for which the average number of connections per byte exceeds a threshold.
+pub fn query_8_1() -> QueryPlan {
+    QueryPlan {
+        operations: vec![
+            Operation::Filter(vec![(Field::Protocol, "6".to_string())]), // Filter TCP packets
+            Operation::Map("(p.dst_ip, count = p.total_len)".to_string()),
+            Operation::Reduce {
+                keys: vec!["dst_ip".to_string()],
+                function: "sum".to_string(),
+                reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+            },
+            Operation::FilterResult { threshold: 500 },
+        ],
+    }
+}
+
+
+/// Query 8: Detect Slowloris attacks
+/// Hosts for which the average number of connections per byte exceeds a threshold.
 pub fn query_8() -> QueryPlan {
     let n_conns = QueryPlan {
         operations: vec![
@@ -133,8 +151,8 @@ pub fn query_8() -> QueryPlan {
 
     QueryPlan {
         operations: vec![
-            Operation::Join(Box::new(n_conns), vec!["dst_ip".to_string()]),
             Operation::Join(Box::new(n_bytes), vec!["dst_ip".to_string()]),
+            Operation::Join(Box::new(n_conns), vec!["dst_ip".to_string()]),
             Operation::Map("(p.dst_ip, p.count1, p.total_len)".to_string()),
             Operation::Map("(p.dst_ip, p.count1 / p.total_len)".to_string()),
             Operation::FilterResult { threshold: 90 },

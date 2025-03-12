@@ -232,6 +232,7 @@ pub fn execute_query(
                 if let Some(ref p) = current_packet {
                     let mut other_results = Vec::new();
                     let other_result = execute_query(other_query, p.clone(), sketches, ground_truth, &mut other_results);
+                    println!("other_results: {:?}", other_results);
                     if let Some(other_packet) = other_result {
                         let joined_packet = join_packets(p, &other_packet, join_keys);
                         current_packet = Some(joined_packet);
@@ -329,7 +330,11 @@ fn map_packet(packet: &DynamicPacket, expr: &str) -> DynamicPacket {
                 let key = kv[0];
                 let value = kv[1];
                 if key == "count" {
-                    if let Ok(count) = value.parse::<u16>() {
+                    if value == "p.total_len" {
+                        if let Some(PacketField::U16(total_len)) = packet.get_field(5) {
+                            new_packet.fields[7] = PacketField::OptionU16(Some(*total_len));
+                        }
+                    } else if let Ok(count) = value.parse::<u16>() {
                         new_packet.fields[7] = PacketField::OptionU16(Some(count));
                     }
                 }
@@ -422,30 +427,45 @@ fn extract_key(packet: &DynamicPacket, keys: &Vec<String>) -> Vec<u8> {
 }
 
 fn join_packets(packet1: &DynamicPacket, packet2: &DynamicPacket, join_keys: &Vec<String>) -> DynamicPacket {
-    let mut joined_packet = DynamicPacket::new(vec![]);
+    // println!("packet1: {:?}", packet1);
+    // println!("packet2: {:?}", packet2);
+    let mut joined_packet = DynamicPacket::new(vec![
+        PacketField::String("".to_string()), // src_ip
+        PacketField::String("".to_string()), // dst_ip
+        PacketField::U16(0),                 // src_port
+        PacketField::U16(0),                 // dst_port
+        PacketField::U8(0),                  // tcp_flags
+        PacketField::U16(0),                 // total_len
+        PacketField::U8(0),                  // protocol
+        PacketField::OptionU16(None),        // dns_ns_type
+        PacketField::OptionU16(None),        // count2
+    ]);
 
     // Add fields from packet1 based on join_keys
     for key in join_keys {
         match key.as_str() {
-            "src_ip" => joined_packet.add_field(packet1.get_field(0).unwrap().clone()),
-            "dst_ip" => joined_packet.add_field(packet1.get_field(1).unwrap().clone()),
-            "src_port" => joined_packet.add_field(packet1.get_field(2).unwrap().clone()),
-            "dst_port" => joined_packet.add_field(packet1.get_field(3).unwrap().clone()),
-            "tcp_flags" => joined_packet.add_field(packet1.get_field(4).unwrap().clone()),
-            "total_len" => joined_packet.add_field(packet1.get_field(5).unwrap().clone()),
-            "protocol" => joined_packet.add_field(packet1.get_field(6).unwrap().clone()),
-            "dns_ns_type" => joined_packet.add_field(packet1.get_field(7).unwrap().clone()),
+            "src_ip" => joined_packet.fields[0] = packet1.get_field(0).unwrap().clone(),
+            "dst_ip" => joined_packet.fields[1] = packet1.get_field(1).unwrap().clone(),
+            "src_port" => joined_packet.fields[2] = packet1.get_field(2).unwrap().clone(),
+            "dst_port" => joined_packet.fields[3] = packet1.get_field(3).unwrap().clone(),
+            "tcp_flags" => joined_packet.fields[4] = packet1.get_field(4).unwrap().clone(),
+            "total_len" => joined_packet.fields[5] = packet1.get_field(5).unwrap().clone(),
+            "protocol" => joined_packet.fields[6] = packet1.get_field(6).unwrap().clone(),
+            "dns_ns_type" => joined_packet.fields[7] = packet1.get_field(7).unwrap().clone(),
             _ => {}
         }
     }
 
-    // Add counts from both packets
+    // Add count from packet1
     if let Some(count1) = packet1.get_field(7) {
-        joined_packet.add_field(count1.clone());
-    }
-    if let Some(count2) = packet2.get_field(7) {
-        joined_packet.add_field(count2.clone());
+        joined_packet.fields[7] = count1.clone();
     }
 
+    // Add count from packet2 as a new field
+    if let Some(count2) = packet2.get_field(7) {
+        joined_packet.fields[8] = count2.clone();
+    }
+
+    // println!("joined packet: {:?}", joined_packet);
     joined_packet
 }
