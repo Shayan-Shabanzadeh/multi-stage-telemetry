@@ -4,8 +4,8 @@ use std::io::Write;
 use std::time::Instant;
 use sysinfo::{System, SystemExt};
 use crate::sketch::Sketch;
-use crate::query_plan::QueryPlan;
-use crate::query_executor::{DynamicPacket, PacketField, execute_query, summarize_epoch};
+use crate::query_plan::{QueryPlan};
+use crate::query_executor::{DynamicPacket, PacketField, execute_query};
 use pcap::Capture;
 use pnet::packet::{Packet, ethernet::EthernetPacket, ipv4::Ipv4Packet, tcp::TcpPacket};
 use std::collections::HashMap;
@@ -49,51 +49,74 @@ fn get_process_memory_usage() -> u64 {
     process.stat.vsize / 1024 // Convert from bytes to KB
 }
 
-/// Generates a key for the flow based on the non-zero and non-empty fields of the `DynamicPacket`.
-/// Generates a key for the flow based on the non-zero and non-empty fields of the `DynamicPacket`.
-fn generate_flow_key(packet: &DynamicPacket) -> (String, String, u16, u16, u8, u16, u8) {
-    (
-        match packet.get_field(0) {
-            Some(PacketField::String(s)) => s.clone(),
-            _ => "".to_string(),
-        },
-        match packet.get_field(1) {
-            Some(PacketField::String(s)) => s.clone(),
-            _ => "".to_string(),
-        },
-        match packet.get_field(2) {
-            Some(PacketField::U16(v)) => *v,
-            _ => 0,
-        },
-        match packet.get_field(3) {
-            Some(PacketField::U16(v)) => *v,
-            _ => 0,
-        },
-        match packet.get_field(4) {
-            Some(PacketField::U8(v)) => *v,
-            _ => 0,
-        },
-        match packet.get_field(5) {
-            Some(PacketField::U16(v)) => *v,
-            _ => 0,
-        },
-        match packet.get_field(6) {
-            Some(PacketField::U8(v)) => *v,
-            _ => 0,
-        },
-    )
+/// Prints and logs the epoch summary with all src_ip counts exceeding the threshold.
+/// Prints and logs the epoch summary with all src_ip counts exceeding the threshold.
+fn print_epoch_summary(
+    timestamp: u64,
+    epoch_packets: usize,
+    total_packets: usize,
+    threshold: usize,
+    ground_truth: &HashMap<String, u64>,
+    sketches: &HashMap<String, Sketch>,
+    log_file: &mut std::fs::File,
+) {
+    println!("Printing epoch summary...");
+    let mut summary = format!(
+        "\n=== EPOCH SUMMARY ===\nEpoch end timestamp: {}\nPackets processed this epoch: {}\nTotal packets processed: {}\n",
+        timestamp, epoch_packets, total_packets
+    );
+
+    let mut valid_entries: Vec<(String, u64, u64)> = ground_truth.iter()
+        .filter(|&(_, &count)| count > threshold as u64)
+        .map(|(key, &real_count)| {
+            let estimated_count = sketches.values().map(|sketch| sketch.estimate(key)).max().unwrap_or(0);
+            (key.clone(), real_count, estimated_count)
+        })
+        .collect();
+
+    // Sort by estimated count in descending order
+    valid_entries.sort_by(|a, b| b.2.cmp(&a.2));
+
+    summary.push_str("Flow key,Count,Ground Truth\n");
+    for (key, real_count, estimated_count) in &valid_entries {
+        // println!("valid entry: {:?}", valid_entries); // Debugging statement
+        let dynamic_packet = format!(
+            "({}, {}, {}, {}, {}, {}, {}, {:?})",
+            "", // src_ip
+            key, // dst_ip
+            0, // src_port
+            0, // dst_port
+            0, // tcp_flags
+            0, // total_len
+            0, // protocol
+            None::<u16> // dns_ns_type
+        );
+        let entry = format!("{},{},{}\n", dynamic_packet, real_count, estimated_count);
+        // println!("dynamic_packet: {}", dynamic_packet); // Debugging statement
+        // println!("{}", entry); // Debugging statement
+        summary.push_str(&entry);
+    }
+
+    if valid_entries.is_empty() {
+        summary.push_str("No entries exceeded the threshold.\n");
+    }
+
+    if let Err(e) = writeln!(log_file, "{}", summary.trim_end()) {
+        eprintln!("Failed to write to log file: {}", e);
+    } else {
+        println!("Successfully wrote to log file."); // Debugging statement
+    }
 }
 
 /// Processes the PCAP file and executes the specified query in a streaming manner.
 /// Runs the query line-rate, printing results as soon as conditions are met and providing epoch summaries.
-pub fn process_pcap(file_path: &str, epoch_size: u64, query: QueryPlan) {
+pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: QueryPlan) {
     println!("Starting packet processing...");
     let mut cap = Capture::from_file(file_path).expect("Failed to open PCAP file");
     let mut sketches: HashMap<String, Sketch> = HashMap::new();
     let mut log_file = initialize_log_file("telemetry_log.csv");
     let mut memory_log_file = initialize_log_file("memory_log.csv"); // New log file for memory usage
     let mut ground_truth: HashMap<String, u64> = HashMap::new();
-    let mut flow_counts: HashMap<(String, String, u16, u16, u8, u16, u8), u64> = HashMap::new(); // Map to store flow counts
 
     let mut total_packets = 0;
     let mut epoch_packets = 0;
@@ -117,12 +140,7 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, query: QueryPlan) {
         current_epoch_start.get_or_insert(packet_timestamp);
 
         if let Some(packet_info) = extract_packet_tuple(&packet) {
-            let passed_flow = execute_query(&query, packet_info, &mut sketches, &mut ground_truth, &mut Vec::new());
-            // println!("{:?}", passed_flow);
-            if let Some(flow) = passed_flow {
-                let flow_key = generate_flow_key(&flow);
-                *flow_counts.entry(flow_key).or_insert(0) += 1;
-            }
+            execute_query(&query, packet_info, &mut sketches, &mut ground_truth, &mut Vec::new());
         }
 
         total_packets += 1;
@@ -136,12 +154,13 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, query: QueryPlan) {
             let total_memory = sys.total_memory();
             let available_memory = sys.available_memory();
 
-            summarize_epoch(
-                &query,
+            print_epoch_summary(
                 packet_timestamp,
                 epoch_packets,
                 total_packets,
-                &flow_counts,
+                threshold,
+                &ground_truth,
+                &sketches,
                 &mut log_file,
             );
 
@@ -152,7 +171,6 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, query: QueryPlan) {
 
             sketches.values_mut().for_each(|sketch| sketch.clear());
             ground_truth.clear();
-            flow_counts.clear(); // Clear the flow counts for the next epoch
             epoch_packets = 0;
             current_epoch_start = Some(packet_timestamp);
         }
@@ -167,12 +185,13 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, query: QueryPlan) {
             let total_memory = sys.total_memory();
             let available_memory = sys.available_memory();
 
-            summarize_epoch(
-                &query,
+            print_epoch_summary(
                 epoch_start,
                 epoch_packets,
                 total_packets,
-                &flow_counts,
+                threshold,
+                &ground_truth,
+                &sketches,
                 &mut log_file,
             );
 
@@ -189,16 +208,16 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, query: QueryPlan) {
     let packets_per_second = total_packets as f64 / elapsed_seconds;
     let average_packets_per_epoch = total_packets as f64 / epoch_count as f64;
     sys.refresh_memory(); // Refresh memory usage one last time
-    let peak_memory = get_process_memory_usage();
+    let peak_memory = get_process_memory_usage(); // Capture peak memory usage of the process
 
     println!("Finished packet processing.");
     println!("Total packets processed: {}", total_packets);
     println!("Elapsed time: {:.2} seconds", elapsed_seconds);
     println!("Average packets per second: {:.2}", packets_per_second);
     println!("Average packets per epoch: {:.2}", average_packets_per_epoch);
-    println!("Peak memory usage: {} KB", peak_memory);
+    println!("Peak memory usage: {} KB", peak_memory); // ✅ Peak memory
 
-    if let Err(e) = writeln!(log_file, "Total packets processed,Elapsed time (seconds),Average packets per second,Average packets per epoch,Peak memory usage (KB)\n{},{:.2},{:.2},{:.2},{}",
+    if let Err(e) = writeln!(log_file, "\n=== PERFORMANCE METRICS ===\nTotal packets processed: {}\nElapsed time: {:.2} seconds\nAverage packets per second: {:.2}\nAverage packets per epoch: {:.2}\nPeak memory usage: {} KB\n",
         total_packets, elapsed_seconds, packets_per_second, average_packets_per_epoch, peak_memory) {
         eprintln!("Failed to write performance metrics to log file: {}", e);
     } else {

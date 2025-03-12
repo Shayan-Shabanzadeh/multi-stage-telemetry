@@ -3,7 +3,6 @@ use crate::fcm_sketch::FCMSketch;
 use crate::elastic_sketch::ElasticSketch;
 use crate::deterministic_sketch::DeterministicSketch;
 
-#[derive(Clone)]
 pub enum Sketch {
     CMSketch(CMSketch),
     FCMSketch(FCMSketch),

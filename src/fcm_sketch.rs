@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::convert::TryInto;
 
-#[derive(Clone)]
 pub struct FCMSketch {
     pub depth: usize,
     pub width: usize,

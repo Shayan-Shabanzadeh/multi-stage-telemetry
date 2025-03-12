@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 
-#[derive(Clone)]
 pub struct CMSketch {
     pub depth: usize,
     pub width: usize,

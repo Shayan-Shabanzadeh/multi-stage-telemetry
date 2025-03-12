@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-#[derive(Clone)]
 pub struct DeterministicSketch {
     counts: HashMap<String, u64>,
 }
