@@ -10,7 +10,7 @@ mod deterministic_sketch;
 
 use std::env;
 use pcap_processor::process_pcap;
-use queries::{query_1, query_2, query_3, query_4, query_5, query_8,  query_11};
+use queries::{query_1, query_2, query_3, query_4, query_5, query_8, query_11};
 
 fn main() {
     let args: Vec<String> = env::args().collect();

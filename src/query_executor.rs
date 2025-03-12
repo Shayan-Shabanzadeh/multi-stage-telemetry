@@ -3,7 +3,41 @@ use crate::sketch::Sketch;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 
-pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u16, u8, Option<u16>), sketches: &mut HashMap<String, Sketch>, ground_truth: &mut HashMap<String, u64>) -> Option<(String, String, u16, u16, u8, u16, u8, Option<u16>)> {
+#[derive(Clone, Debug)]
+pub struct DynamicPacket {
+    fields: Vec<PacketField>,
+}
+
+impl DynamicPacket {
+    pub fn new(fields: Vec<PacketField>) -> Self {
+        DynamicPacket { fields }
+    }
+
+    pub fn get_field(&self, index: usize) -> Option<&PacketField> {
+        self.fields.get(index)
+    }
+
+    pub fn add_field(&mut self, field: PacketField) {
+        self.fields.push(field);
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum PacketField {
+    String(String),
+    U16(u16),
+    U8(u8),
+    OptionU16(Option<u16>),
+    OptionTupleU16(Option<(u16, u16)>),
+}
+
+pub fn execute_query(
+    query: &QueryPlan,
+    packet: DynamicPacket,
+    sketches: &mut HashMap<String, Sketch>,
+    ground_truth: &mut HashMap<String, u64>,
+    results: &mut Vec<DynamicPacket>,
+) -> Option<DynamicPacket> {
     let mut current_packet = Some(packet);
     let mut seen = HashSet::new();
 
@@ -14,13 +48,34 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
                     let mut pass = true;
                     for (field, value) in conditions {
                         pass &= match field {
-                            Field::SourceIp => &p.0 == value,
-                            Field::DestIp => &p.1 == value,
-                            Field::SourcePort => p.2.to_string() == *value,
-                            Field::DestPort => p.3.to_string() == *value,
-                            Field::TcpFlag => p.4.to_string() == *value,
-                            Field::Protocol => p.6.to_string() == *value,
-                            Field::DnsNsType => p.7.map_or(false, |v| v.to_string() == *value),
+                            Field::SourceIp => match p.get_field(0) {
+                                Some(PacketField::String(s)) => s == value,
+                                _ => false,
+                            },
+                            Field::DestIp => match p.get_field(1) {
+                                Some(PacketField::String(s)) => s == value,
+                                _ => false,
+                            },
+                            Field::SourcePort => match p.get_field(2) {
+                                Some(PacketField::U16(v)) => v.to_string() == *value,
+                                _ => false,
+                            },
+                            Field::DestPort => match p.get_field(3) {
+                                Some(PacketField::U16(v)) => v.to_string() == *value,
+                                _ => false,
+                            },
+                            Field::TcpFlag => match p.get_field(4) {
+                                Some(PacketField::U8(v)) => v.to_string() == *value,
+                                _ => false,
+                            },
+                            Field::Protocol => match p.get_field(6) {
+                                Some(PacketField::U8(v)) => v.to_string() == *value,
+                                _ => false,
+                            },
+                            Field::DnsNsType => match p.get_field(7) {
+                                Some(PacketField::OptionU16(v)) => v.map_or(false, |v| v.to_string() == *value),
+                                _ => false,
+                            },
                         };
                         if !pass {
                             break;
@@ -35,10 +90,10 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
             }
             Operation::Map(expr) => {
                 if let Some(ref p) = current_packet {
-                    // println!("Before Map: {:?}", p);
-                    let new_tuple = map_packet(p, expr);
-                    // println!("After Map: {:?}", new_tuple);
-                    current_packet = Some(new_tuple);
+                    // println!("before Mapping packet: {:?}", p);
+                    let new_packet = map_packet(p, expr);
+                    // println!("after Mapping packet: {:?}", new_packet);
+                    current_packet = Some(new_packet);
                 }
             }
             Operation::Reduce { keys, function: _, reduce_type } => {
@@ -52,20 +107,24 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
                                 Sketch::new_cm_sketch(*memory_in_bytes, *depth, *seed)
                             });
 
-                            // Get the current count from the sketch
                             let current_count = sketch.estimate(&key);
 
-                            // Update the sketch with the new count
-                            if let Some(count) = p.7 {
+                            if let Some(count) = match p.get_field(7) {
+                                Some(PacketField::OptionU16(v)) => *v,
+                                _ => None,
+                            } {
                                 sketch.increment(&key, count as u64);
                             } else {
-                                eprintln!("Error reduce: Count value not found in tuple");
+                                eprintln!("Error reduce: Count value not found in tuple at index 7");
                                 return None;
                             }
 
-                            // Update the tuple with the new count
-                            let new_count = current_count + p.7.unwrap() as u64;
-                            current_packet = Some(update_tuple_with_count(p, new_count));
+                            let new_count = current_count + match p.get_field(7) {
+                                Some(PacketField::OptionU16(v)) => v.unwrap() as u64,
+                                _ => 0,
+                            };
+                            current_packet = Some(update_packet_with_count(p, new_count));
+                            // println!("Reduced packet: {:?}", current_packet);
                         }
                         ReduceType::FCMReduce { depth, width, seed } => {
                             let sketch_key = format!("FCMSketch_{}_{}", depth, width);
@@ -73,20 +132,23 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
                                 Sketch::new_fcm_sketch(*depth, *width, *seed)
                             });
 
-                            // Get the current count from the sketch
                             let current_count = sketch.estimate(&key);
 
-                            // Update the sketch with the new count
-                            if let Some(count) = p.7 {
+                            if let Some(count) = match p.get_field(7) {
+                                Some(PacketField::OptionU16(v)) => *v,
+                                _ => None,
+                            } {
                                 sketch.increment(&key, count as u64);
                             } else {
-                                eprintln!("Error reduce: Count value not found in tuple");
+                                eprintln!("Error reduce: Count value not found in tuple at index 7");
                                 return None;
                             }
 
-                            // Update the tuple with the new count
-                            let new_count = current_count + p.7.unwrap() as u64;
-                            current_packet = Some(update_tuple_with_count(p, new_count));
+                            let new_count = current_count + match p.get_field(7) {
+                                Some(PacketField::OptionU16(v)) => v.unwrap() as u64,
+                                _ => 0,
+                            };
+                            current_packet = Some(update_packet_with_count(p, new_count));
                         }
                         ReduceType::ElasticReduce { depth, width, seed } => {
                             let sketch_key = format!("ElasticSketch_{}_{}", depth, width);
@@ -94,20 +156,23 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
                                 Sketch::new_elastic_sketch(*depth, *width, *seed)
                             });
 
-                            // Get the current count from the sketch
                             let current_count = sketch.estimate(&key);
 
-                            // Update the sketch with the new count
-                            if let Some(count) = p.7 {
+                            if let Some(count) = match p.get_field(7) {
+                                Some(PacketField::OptionU16(v)) => *v,
+                                _ => None,
+                            } {
                                 sketch.increment(&key, count as u64);
                             } else {
-                                eprintln!("Error reduce: Count value not found in tuple");
+                                eprintln!("Error reduce: Count value not found in tuple at index 7");
                                 return None;
                             }
 
-                            // Update the tuple with the new count
-                            let new_count = current_count + p.7.unwrap() as u64;
-                            current_packet = Some(update_tuple_with_count(p, new_count));
+                            let new_count = current_count + match p.get_field(7) {
+                                Some(PacketField::OptionU16(v)) => v.unwrap() as u64,
+                                _ => 0,
+                            };
+                            current_packet = Some(update_packet_with_count(p, new_count));
                         }
                         ReduceType::DeterministicReduce => {
                             let sketch_key = "DeterministicSketch".to_string();
@@ -115,35 +180,40 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
                                 Sketch::new_deterministic_sketch()
                             });
 
-                            // Get the current count from the sketch
                             let current_count = sketch.estimate(&key);
 
-                            // Update the sketch with the new count
-                            if let Some(count) = p.7 {
+                            if let Some(count) = match p.get_field(7) {
+                                Some(PacketField::OptionU16(v)) => *v,
+                                _ => None,
+                            } {
                                 sketch.increment(&key, count as u64);
                             } else {
-                                eprintln!("Error reduce: Count value not found in tuple");
+                                eprintln!("Error reduce: Count value not found in tuple at index 7");
                                 return None;
                             }
 
-                            // Update the tuple with the new count
-                            let new_count = current_count + p.7.unwrap() as u64;
-                            current_packet = Some(update_tuple_with_count(p, new_count));
+                            let new_count = current_count + match p.get_field(7) {
+                                Some(PacketField::OptionU16(v)) => v.unwrap() as u64,
+                                _ => 0,
+                            };
+                            current_packet = Some(update_packet_with_count(p, new_count));
                         }
                     }
                 }
             }
             Operation::FilterResult { threshold } => {
                 if let Some(ref p) = current_packet {
-                    if let Some(count) = p.7 {
-                        // println!("FilterResult: {:?} and count: {}", p, count);
+                    if let Some(count) = match p.get_field(7) {
+                        Some(PacketField::OptionU16(v)) => *v,
+                        _ => None,
+                    } {
+                        // println!("packets: {:?}", p);
                         if count >= *threshold as u16 {
-                            // println!("Packet passed filter result: {:?}", p);
                         } else {
                             current_packet = None;
                         }
                     } else {
-                        eprintln!("Error filter result: Count value not found in tuple");
+                        eprintln!("Error filter result: Count value not found in tuple at index 7");
                         return None;
                     }
                 }
@@ -160,17 +230,21 @@ pub fn execute_query(query: &QueryPlan, packet: (String, String, u16, u16, u8, u
             }
             Operation::Join(other_query, join_keys) => {
                 if let Some(ref p) = current_packet {
-                    let other_result = execute_query(other_query, p.clone(), sketches, ground_truth);
+                    let mut other_results = Vec::new();
+                    let other_result = execute_query(other_query, p.clone(), sketches, ground_truth, &mut other_results);
                     if let Some(other_packet) = other_result {
                         let joined_packet = join_packets(p, &other_packet, join_keys);
                         current_packet = Some(joined_packet);
-                        // println!("Joined packet: {:?}", current_packet);
                     } else {
                         current_packet = None;
                     }
                 }
             }
         }
+    }
+
+    if let Some(ref p) = current_packet {
+        results.push(p.clone());
     }
 
     current_packet
@@ -223,97 +297,155 @@ pub fn summarize_epoch(
     }
 }
 
-fn map_packet(packet: &(String, String, u16, u16, u8, u16, u8, Option<u16>), expr: &str) -> (String, String, u16, u16, u8, u16, u8, Option<u16>) {
-    // Parse the expression and create a new tuple based on the expression
-    // Example expressions:
-    // "(p.dst_ip, 1)"
-    // "(p.dst_ip, p.src_ip)"
-    // "(p.src_ip)"
+fn map_packet(packet: &DynamicPacket, expr: &str) -> DynamicPacket {
     let parts: Vec<&str> = expr.trim_matches(|c| c == '(' || c == ')').split(',').map(|s| s.trim()).collect();
-    let mut new_tuple = ("".to_string(), "".to_string(), 0, 0, 0, 0, 0, None);
+    let mut new_packet = DynamicPacket::new(vec![
+        PacketField::String("".to_string()), // src_ip
+        PacketField::String("".to_string()), // dst_ip
+        PacketField::U16(0),                 // src_port
+        PacketField::U16(0),                 // dst_port
+        PacketField::U8(0),                  // tcp_flags
+        PacketField::U16(0),                 // total_len
+        PacketField::U8(0),                  // protocol
+        PacketField::OptionU16(None),        // dns_ns_type
+    ]);
 
-    for (i, part) in parts.iter().enumerate() {
-        match *part {
-            "p.src_ip" => new_tuple.0 = packet.0.clone(),
-            "p.dst_ip" => new_tuple.1 = packet.1.clone(),
-            "p.src_port" => new_tuple.2 = packet.2,
-            "p.dst_port" => new_tuple.3 = packet.3,
-            "p.tcp_flags" => new_tuple.4 = packet.4,
-            "p.total_len" => new_tuple.5 = packet.5,
-            "p.protocol" => new_tuple.6 = packet.6,
-            "1" => new_tuple.7 = Some(1),
-            _ => {
-                if part.starts_with("count = ") {
-                    let value = part.trim_start_matches("count = ").trim();
-                    new_tuple.7 = match value {
-                        "1" => Some(1),
-                        "p.total_len" => Some(packet.5 as u16),
-                        _ => None,
-                    };
+    for part in parts {
+        if part.starts_with("p.") {
+            match part {
+                "p.src_ip" => new_packet.fields[0] = packet.get_field(0).unwrap().clone(),
+                "p.dst_ip" => new_packet.fields[1] = packet.get_field(1).unwrap().clone(),
+                "p.src_port" => new_packet.fields[2] = packet.get_field(2).unwrap().clone(),
+                "p.dst_port" => new_packet.fields[3] = packet.get_field(3).unwrap().clone(),
+                "p.tcp_flags" => new_packet.fields[4] = packet.get_field(4).unwrap().clone(),
+                "p.total_len" => new_packet.fields[5] = packet.get_field(5).unwrap().clone(),
+                "p.protocol" => new_packet.fields[6] = packet.get_field(6).unwrap().clone(),
+                "p.dns_ns_type" => new_packet.fields[7] = packet.get_field(7).unwrap().clone(),
+                _ => {}
+            }
+        } else if part.contains('=') {
+            let kv: Vec<&str> = part.split('=').map(|s| s.trim()).collect();
+            if kv.len() == 2 {
+                let key = kv[0];
+                let value = kv[1];
+                if key == "count" {
+                    if let Ok(count) = value.parse::<u16>() {
+                        new_packet.fields[7] = PacketField::OptionU16(Some(count));
+                    }
                 }
             }
         }
     }
 
-    new_tuple
+    new_packet
 }
 
-fn update_tuple_with_count(packet: &(String, String, u16, u16, u8, u16, u8, Option<u16>), count: u64) -> (String, String, u16, u16, u8, u16, u8, Option<u16>) {
-    (
-        packet.0.clone(),
-        packet.1.clone(),
-        packet.2,
-        packet.3,
-        packet.4,
-        packet.5,
-        packet.6,
-        Some(count as u16),
-    )
+fn update_packet_with_count(packet: &DynamicPacket, count: u64) -> DynamicPacket {
+    let mut new_packet = packet.clone();
+    if let Some(field) = new_packet.fields.get_mut(7) {
+        *field = PacketField::OptionU16(Some(count as u16));
+    } else {
+        eprintln!("Error: Field at index 7 not found in packet");
+    }
+    new_packet
 }
 
-fn generate_key(packet: &(String, String, u16, u16, u8, u16, u8, Option<u16>), keys: &Vec<String>) -> String {
+fn generate_key(packet: &DynamicPacket, keys: &Vec<String>) -> String {
     keys.iter()
         .map(|key| match key.as_str() {
-            "src_ip" => packet.0.clone(),
-            "dst_ip" => packet.1.clone(),
-            "src_port" => packet.2.to_string(),
-            "dst_port" => packet.3.to_string(),
-            "tcp_flags" => packet.4.to_string(),
-            "total_len" => packet.5.to_string(),
-            "protocol" => packet.6.to_string(),
-            "dns_ns_type" => packet.7.map_or("".to_string(), |v| v.to_string()),
+            "src_ip" => match packet.get_field(0) {
+                Some(PacketField::String(s)) => s.clone(),
+                _ => "".to_string(),
+            },
+            "dst_ip" => match packet.get_field(1) {
+                Some(PacketField::String(s)) => s.clone(),
+                _ => "".to_string(),
+            },
+            "src_port" => match packet.get_field(2) {
+                Some(PacketField::U16(v)) => v.to_string(),
+                _ => "".to_string(),
+            },
+            "dst_port" => match packet.get_field(3) {
+                Some(PacketField::U16(v)) => v.to_string(),
+                _ => "".to_string(),
+            },
+            "tcp_flags" => match packet.get_field(4) {
+                Some(PacketField::U8(v)) => v.to_string(),
+                _ => "".to_string(),
+            },
+            "total_len" => match packet.get_field(5) {
+                Some(PacketField::U16(v)) => v.to_string(),
+                _ => "".to_string(),
+            },
+            "protocol" => match packet.get_field(6) {
+                Some(PacketField::U8(v)) => v.to_string(),
+                _ => "".to_string(),
+            },
+            "dns_ns_type" => match packet.get_field(7) {
+                Some(PacketField::OptionU16(v)) => v.map_or("".to_string(), |v| v.to_string()),
+                _ => "".to_string(),
+            },
             _ => "".to_string(),
         })
         .collect::<Vec<String>>()
         .join("_")
 }
 
-fn extract_key(packet: &(String, String, u16, u16, u8, u16, u8, Option<u16>), keys: &Vec<String>) -> Vec<u8> {
+fn extract_key(packet: &DynamicPacket, keys: &Vec<String>) -> Vec<u8> {
     keys.iter().flat_map(|key| match key.as_str() {
-        "src_ip" => packet.0.as_bytes().to_vec(),
-        "dst_ip" => packet.1.as_bytes().to_vec(),
-        "src_port" => packet.2.to_be_bytes().to_vec(),
-        "dst_port" => packet.3.to_be_bytes().to_vec(),
-        "total_len" => packet.5.to_be_bytes().to_vec(),
-        "dns_ns_type" => packet.7.map_or(vec![], |v| v.to_be_bytes().to_vec()),
+        "src_ip" => match packet.get_field(0) {
+            Some(PacketField::String(s)) => s.as_bytes().to_vec(),
+            _ => vec![],
+        },
+        "dst_ip" => match packet.get_field(1) {
+            Some(PacketField::String(s)) => s.as_bytes().to_vec(),
+            _ => vec![],
+        },
+        "src_port" => match packet.get_field(2) {
+            Some(PacketField::U16(v)) => v.to_be_bytes().to_vec(),
+            _ => vec![],
+        },
+        "dst_port" => match packet.get_field(3) {
+            Some(PacketField::U16(v)) => v.to_be_bytes().to_vec(),
+            _ => vec![],
+        },
+        "total_len" => match packet.get_field(5) {
+            Some(PacketField::U16(v)) => v.to_be_bytes().to_vec(),
+            _ => vec![],
+        },
+        "dns_ns_type" => match packet.get_field(7) {
+            Some(PacketField::OptionU16(v)) => v.map_or(vec![], |v| v.to_be_bytes().to_vec()),
+            _ => vec![],
+        },
         _ => vec![],
     }).collect()
 }
 
-fn join_packets(packet1: &(String, String, u16, u16, u8, u16, u8, Option<u16>), packet2: &(String, String, u16, u16, u8, u16, u8, Option<u16>), join_keys: &Vec<String>) -> (String, String, u16, u16, u8, u16, u8, Option<u16>) {
-    let mut joined_packet = packet1.clone();
+fn join_packets(packet1: &DynamicPacket, packet2: &DynamicPacket, join_keys: &Vec<String>) -> DynamicPacket {
+    let mut joined_packet = DynamicPacket::new(vec![]);
+
+    // Add fields from packet1 based on join_keys
     for key in join_keys {
         match key.as_str() {
-            "src_ip" => joined_packet.0 = packet2.0.clone(),
-            "dst_ip" => joined_packet.1 = packet2.1.clone(),
-            "src_port" => joined_packet.2 = packet2.2,
-            "dst_port" => joined_packet.3 = packet2.3,
-            "tcp_flags" => joined_packet.4 = packet2.4,
-            "total_len" => joined_packet.5 = packet2.5,
-            "protocol" => joined_packet.6 = packet2.6,
-            "dns_ns_type" => joined_packet.7 = packet2.7,
+            "src_ip" => joined_packet.add_field(packet1.get_field(0).unwrap().clone()),
+            "dst_ip" => joined_packet.add_field(packet1.get_field(1).unwrap().clone()),
+            "src_port" => joined_packet.add_field(packet1.get_field(2).unwrap().clone()),
+            "dst_port" => joined_packet.add_field(packet1.get_field(3).unwrap().clone()),
+            "tcp_flags" => joined_packet.add_field(packet1.get_field(4).unwrap().clone()),
+            "total_len" => joined_packet.add_field(packet1.get_field(5).unwrap().clone()),
+            "protocol" => joined_packet.add_field(packet1.get_field(6).unwrap().clone()),
+            "dns_ns_type" => joined_packet.add_field(packet1.get_field(7).unwrap().clone()),
             _ => {}
         }
     }
+
+    // Add counts from both packets
+    if let Some(count1) = packet1.get_field(7) {
+        joined_packet.add_field(count1.clone());
+    }
+    if let Some(count2) = packet2.get_field(7) {
+        joined_packet.add_field(count2.clone());
+    }
+
     joined_packet
 }

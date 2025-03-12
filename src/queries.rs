@@ -6,7 +6,7 @@ pub fn query_1() -> QueryPlan {
     QueryPlan {
         operations: vec![
             Operation::Filter(vec![(Field::TcpFlag, "2".to_string())]),
-            Operation::Map("(p.dst_ip, 1)".to_string()),
+            Operation::Map("(p.dst_ip, count = 1)".to_string()),
             Operation::Reduce {
                 keys: vec!["dst_ip".to_string()],
                 function: "sum".to_string(),
@@ -16,7 +16,7 @@ pub fn query_1() -> QueryPlan {
                 // reduce_type: ReduceType::ElasticReduce { depth: 4, width: 1024, seed: 42 },
 
             },
-            Operation::FilterResult { threshold: 1000 },
+            Operation::FilterResult { threshold: 100 },
         ],
     }
 }

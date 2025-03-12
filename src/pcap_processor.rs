@@ -5,7 +5,7 @@ use std::time::Instant;
 use sysinfo::{System, SystemExt};
 use crate::sketch::Sketch;
 use crate::query_plan::QueryPlan;
-use crate::query_executor::{execute_query, summarize_epoch};
+use crate::query_executor::{DynamicPacket, PacketField, execute_query, summarize_epoch};
 use pcap::Capture;
 use pnet::packet::{Packet, ethernet::EthernetPacket, ipv4::Ipv4Packet, tcp::TcpPacket};
 use std::collections::HashMap;
@@ -20,22 +20,23 @@ fn initialize_log_file(path: &str) -> std::fs::File {
         .expect("Cannot open log file")
 }
 
-/// Extracts a tuple from the packet with fields: (src_ip, dst_ip, src_port, dst_port, tcp_flags, total_len, protocol, dns_ns_type)
-fn extract_packet_tuple(packet: &pcap::Packet) -> Option<(String, String, u16, u16, u8, u16, u8, Option<u16>)> {
+/// Extracts a `DynamicPacket` from the packet with fields: (src_ip, dst_ip, src_port, dst_port, tcp_flags, total_len, protocol, dns_ns_type)
+fn extract_packet_tuple(packet: &pcap::Packet) -> Option<DynamicPacket> {
     let ethernet = EthernetPacket::new(packet.data)?;
     let ipv4 = Ipv4Packet::new(ethernet.payload())?;
 
     if ipv4.get_next_level_protocol() == pnet::packet::ip::IpNextHeaderProtocols::Tcp {
-        TcpPacket::new(ipv4.payload()).map(|tcp| (
-            ipv4.get_source().to_string(),
-            ipv4.get_destination().to_string(),
-            tcp.get_source(),
-            tcp.get_destination(),
-            tcp.get_flags(),
-            ipv4.get_total_length(),
-            ipv4.get_next_level_protocol().0,
-            None, // Initialize dns_ns_type with None
-        ))
+        let tcp = TcpPacket::new(ipv4.payload())?;
+        Some(DynamicPacket::new(vec![
+            PacketField::String(ipv4.get_source().to_string()),
+            PacketField::String(ipv4.get_destination().to_string()),
+            PacketField::U16(tcp.get_source()),
+            PacketField::U16(tcp.get_destination()),
+            PacketField::U8(tcp.get_flags()),
+            PacketField::U16(ipv4.get_total_length()),
+            PacketField::U8(ipv4.get_next_level_protocol().0),
+            PacketField::OptionU16(None), // Initialize dns_ns_type with None
+        ]))
     } else {
         None
     }
@@ -48,16 +49,38 @@ fn get_process_memory_usage() -> u64 {
     process.stat.vsize / 1024 // Convert from bytes to KB
 }
 
-/// Generates a key for the flow based on the non-zero and non-empty fields of the tuple.
-fn generate_flow_key(packet: &(String, String, u16, u16, u8, u16, u8, Option<u16>)) -> (String, String, u16, u16, u8, u16, u8) {
+/// Generates a key for the flow based on the non-zero and non-empty fields of the `DynamicPacket`.
+/// Generates a key for the flow based on the non-zero and non-empty fields of the `DynamicPacket`.
+fn generate_flow_key(packet: &DynamicPacket) -> (String, String, u16, u16, u8, u16, u8) {
     (
-        packet.0.clone(),
-        packet.1.clone(),
-        packet.2,
-        packet.3,
-        packet.4,
-        packet.5,
-        packet.6,
+        match packet.get_field(0) {
+            Some(PacketField::String(s)) => s.clone(),
+            _ => "".to_string(),
+        },
+        match packet.get_field(1) {
+            Some(PacketField::String(s)) => s.clone(),
+            _ => "".to_string(),
+        },
+        match packet.get_field(2) {
+            Some(PacketField::U16(v)) => *v,
+            _ => 0,
+        },
+        match packet.get_field(3) {
+            Some(PacketField::U16(v)) => *v,
+            _ => 0,
+        },
+        match packet.get_field(4) {
+            Some(PacketField::U8(v)) => *v,
+            _ => 0,
+        },
+        match packet.get_field(5) {
+            Some(PacketField::U16(v)) => *v,
+            _ => 0,
+        },
+        match packet.get_field(6) {
+            Some(PacketField::U8(v)) => *v,
+            _ => 0,
+        },
     )
 }
 
@@ -94,7 +117,7 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, query: QueryPlan) {
         current_epoch_start.get_or_insert(packet_timestamp);
 
         if let Some(packet_info) = extract_packet_tuple(&packet) {
-            let passed_flow = execute_query(&query, packet_info, &mut sketches, &mut ground_truth);
+            let passed_flow = execute_query(&query, packet_info, &mut sketches, &mut ground_truth, &mut Vec::new());
             // println!("{:?}", passed_flow);
             if let Some(flow) = passed_flow {
                 let flow_key = generate_flow_key(&flow);
