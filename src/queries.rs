@@ -151,8 +151,11 @@ pub fn query_8() -> QueryPlan {
 
     QueryPlan {
         operations: vec![
-            Operation::Join(Box::new(n_bytes), vec!["dst_ip".to_string()]),
-            Operation::Join(Box::new(n_conns), vec!["dst_ip".to_string()]),
+            Operation::Join {
+                left_query: Box::new(n_bytes),
+                right_query: Box::new(n_conns),
+                join_keys: vec!["dst_ip".to_string()],
+            },
             Operation::Map("(p.dst_ip, p.count1, p.total_len)".to_string()),
             Operation::Map("(p.dst_ip, p.count1 / p.total_len)".to_string()),
             Operation::FilterResult { threshold: 90 },

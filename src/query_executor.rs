@@ -213,7 +213,7 @@ pub fn execute_query(
                             current_packet = None;
                         }
                     } else {
-                        eprintln!("Error filter result: Count value not found in tuple at index 7");
+                        // eprintln!("Error filter result: Count value not found in tuple at index 7");
                         return None;
                     }
                 }
@@ -228,13 +228,16 @@ pub fn execute_query(
                     }
                 }
             }
-            Operation::Join(other_query, join_keys) => {
+            Operation::Join { left_query, right_query, join_keys } => {
                 if let Some(ref p) = current_packet {
-                    let mut other_results = Vec::new();
-                    let other_result = execute_query(other_query, p.clone(), sketches, ground_truth, &mut other_results);
-                    println!("other_results: {:?}", other_results);
-                    if let Some(other_packet) = other_result {
-                        let joined_packet = join_packets(p, &other_packet, join_keys);
+                    let mut left_results = Vec::new();
+                    let left_result = execute_query(left_query, p.clone(), sketches, ground_truth, &mut left_results);
+
+                    let mut right_results = Vec::new();
+                    let right_result = execute_query(right_query, p.clone(), sketches, ground_truth, &mut right_results);
+
+                    if let (Some(left_packet), Some(right_packet)) = (left_result, right_result) {
+                        let joined_packet = join_packets(&left_packet, &right_packet, join_keys);
                         current_packet = Some(joined_packet);
                     } else {
                         current_packet = None;
@@ -427,8 +430,8 @@ fn extract_key(packet: &DynamicPacket, keys: &Vec<String>) -> Vec<u8> {
 }
 
 fn join_packets(packet1: &DynamicPacket, packet2: &DynamicPacket, join_keys: &Vec<String>) -> DynamicPacket {
-    // println!("packet1: {:?}", packet1);
-    // println!("packet2: {:?}", packet2);
+    println!("packet1: {:?}", packet1);
+    println!("packet2: {:?}", packet2);
     let mut joined_packet = DynamicPacket::new(vec![
         PacketField::String("".to_string()), // src_ip
         PacketField::String("".to_string()), // dst_ip
@@ -466,6 +469,6 @@ fn join_packets(packet1: &DynamicPacket, packet2: &DynamicPacket, join_keys: &Ve
         joined_packet.fields[8] = count2.clone();
     }
 
-    // println!("joined packet: {:?}", joined_packet);
+    println!("joined packet: {:?}", joined_packet);
     joined_packet
 }

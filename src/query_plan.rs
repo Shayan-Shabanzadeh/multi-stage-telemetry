@@ -16,9 +16,13 @@ pub enum Operation {
         function: String,
         reduce_type: ReduceType,
     },
-    FilterResult { threshold: u64 }, 
+    FilterResult { threshold: u64 },
     Distinct(Vec<String>),
-    Join(Box<QueryPlan>, Vec<String>),
+    Join {
+        left_query: Box<QueryPlan>,
+        right_query: Box<QueryPlan>,
+        join_keys: Vec<String>,
+    },
 }
 
 pub enum ReduceType {
