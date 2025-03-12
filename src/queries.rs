@@ -28,17 +28,20 @@ pub fn query_2() -> QueryPlan {
     QueryPlan {
         operations: vec![
             Operation::Map("(p.dst_ip, p.src_ip, p.total_len)".to_string()),
-            Operation::Distinct(vec!["dst_ip".to_string(), "src_ip".to_string(), "total_len".to_string()]),
-            Operation::Map("(p.dst_ip, p.total_len)".to_string()),
-            Operation::Map("(p.dst_ip, p.total_len, 1)".to_string()),
+            Operation::Distinct {
+                keys: vec!["dst_ip".to_string(), "src_ip".to_string(), "total_len".to_string()],
+                distinct_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+            },
+            // Operation::Map("(p.dst_ip, p.total_len)".to_string()),
+            Operation::Map("(p.dst_ip, p.total_len, count = 1)".to_string()),
             Operation::Reduce {
                 keys: vec!["dst_ip".to_string(), "total_len".to_string()],
                 function: "sum".to_string(),
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
-                index: 8,
+                index: 5,
             },
-            Operation::FilterResult { threshold: 8000  , index: 8 },
-            Operation::Map("(p.dst_ip)".to_string()),
+            Operation::FilterResult { threshold: 10  , index: 5 },
+            // Operation::Map("(p.dst_ip)".to_string()),
         ],
     }
 }
@@ -49,13 +52,16 @@ pub fn query_3() -> QueryPlan {
     QueryPlan {
         operations: vec![
             Operation::Map("(p.dst_ip, p.src_ip)".to_string()),
-            Operation::Distinct(vec!["dst_ip".to_string(), "src_ip".to_string()]),
-            Operation::Map("(p.src_ip, 1)".to_string()),
+            Operation::Distinct {
+                keys: vec!["dst_ip".to_string(), "src_ip".to_string()],
+                distinct_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+            },
+            Operation::Map("(p.src_ip, count = 1)".to_string()),
             Operation::Reduce {
                 keys: vec!["src_ip".to_string()],
                 function: "sum".to_string(),
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
-                index: 7,
+                index: 8,
             },
             Operation::FilterResult { threshold: 1000  , index: 8 },
             Operation::Map("(p.src_ip)".to_string()),
@@ -70,18 +76,21 @@ pub fn query_4() -> QueryPlan {
     QueryPlan {
         operations: vec![
             Operation::Filter(vec![(Field::Protocol, "6".to_string())]), // Filter TCP packets
-            Operation::Map("(p.src_ip, p.dst_port)".to_string()),
-            Operation::Distinct(vec!["src_ip".to_string(), "dst_port".to_string()]),
-            Operation::Map("(p.src_ip, 1)".to_string()),
+            // TODO uncomment 
+            // Operation::Map("(p.src_ip, p.dst_port)".to_string()),
+            Operation::Distinct {
+                keys: vec!["src_ip".to_string(), "dst_port".to_string()],
+                distinct_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+            },
+            Operation::Map("(p.src_ip, p.dst_port , count = 1)".to_string()),
             Operation::Reduce {
                 keys: vec!["src_ip".to_string()],
                 function: "sum".to_string(),
                 // reduce_type: ReduceType::FCMReduce { depth: 4, width: 1024, seed: 42 },
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
-                index: 7,
+                index: 8,
             },
             Operation::FilterResult { threshold: 1000 , index: 8 },
-            Operation::Map("(p.src_ip)".to_string()),
         ],
     }
 }
@@ -91,12 +100,12 @@ pub fn query_4() -> QueryPlan {
 pub fn query_5() -> QueryPlan {
     QueryPlan {
         operations: vec![
-            Operation::Map("(p.dst_ip, p.src_ip, p.total_len)".to_string()),
+            Operation::Map("(p.dst_ip, p.src_ip, count = p.total_len)".to_string()),
             Operation::Reduce {
                 keys: vec!["dst_ip".to_string(), "src_ip".to_string()],
                 function: "sum".to_string(),
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
-                index: 7,
+                index: 8,
             },
             Operation::FilterResult { threshold: 1000 , index: 8 },
             Operation::Map("(p.dst_ip)".to_string()),
@@ -131,7 +140,10 @@ pub fn query_8() -> QueryPlan {
         operations: vec![
             Operation::Filter(vec![(Field::Protocol, "6".to_string())]), // Filter TCP packets
             Operation::Map("(p.dst_ip, p.src_ip, p.src_port)".to_string()),
-            Operation::Distinct(vec!["dst_ip".to_string(), "src_ip".to_string(), "src_port".to_string()]),
+            Operation::Distinct {
+                keys: vec!["dst_ip".to_string(), "src_ip".to_string(), "src_port".to_string()],
+                distinct_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+            },
             Operation::Map("(p.dst_ip, count = 1)".to_string()),
             Operation::Reduce {
                 keys: vec!["dst_ip".to_string()],
@@ -203,7 +215,10 @@ pub fn query_11() -> QueryPlan {
             Operation::Filter(vec![(Field::SourcePort, "53".to_string())]), // Filter DNS responses
             Operation::Filter(vec![(Field::DnsNsType, "46".to_string())]), // Filter specific DNS type
             Operation::Map("(p.dst_ip, p.src_ip)".to_string()),
-            Operation::Distinct(vec!["dst_ip".to_string(), "src_ip".to_string()]),
+            Operation::Distinct {
+                keys: vec!["dst_ip".to_string(), "src_ip".to_string(), "total_len".to_string()],
+                distinct_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+            },
             Operation::Map("(p.dst_ip, 1)".to_string()),
             Operation::Reduce {
                 keys: vec!["dst_ip".to_string()],
@@ -216,4 +231,3 @@ pub fn query_11() -> QueryPlan {
         ],
     }
 }
-

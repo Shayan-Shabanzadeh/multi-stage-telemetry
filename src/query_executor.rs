@@ -39,7 +39,6 @@ pub fn execute_query(
     results: &mut Vec<DynamicPacket>,
 ) -> Option<DynamicPacket> {
     let mut current_packet = Some(packet);
-    let mut seen = HashSet::new();
 
     for op in &query.operations {
         match op {
@@ -83,6 +82,7 @@ pub fn execute_query(
                     }
                     if pass {
                         current_packet = Some(p.clone());
+                        // println!("Filter packet: {:?}", current_packet);
                     } else {
                         current_packet = None;
                     }
@@ -111,6 +111,7 @@ pub fn execute_query(
                             // println!("packet: {:?}", p);
                             if let Some(count) = match p.get_field(*index) {
                                 Some(PacketField::OptionU16(v)) => *v,
+                                Some(PacketField::U16(v)) => Some(*v),
                                 _ => None,
                             } {
                                 sketch.increment(&key, count as u64);
@@ -121,6 +122,7 @@ pub fn execute_query(
 
                             let new_count = current_count + match p.get_field(*index) {
                                 Some(PacketField::OptionU16(v)) => v.unwrap() as u64,
+                                Some(PacketField::U16(v)) => *v as u64,
                                 _ => 0,
                             };
                             current_packet = Some(update_packet_with_count(p, new_count, *index));
@@ -135,6 +137,7 @@ pub fn execute_query(
 
                             if let Some(count) = match p.get_field(*index) {
                                 Some(PacketField::OptionU16(v)) => *v,
+                                Some(PacketField::U16(v)) => Some(*v),
                                 _ => None,
                             } {
                                 sketch.increment(&key, count as u64);
@@ -145,6 +148,7 @@ pub fn execute_query(
 
                             let new_count = current_count + match p.get_field(*index) {
                                 Some(PacketField::OptionU16(v)) => v.unwrap() as u64,
+                                Some(PacketField::U16(v)) => *v as u64,
                                 _ => 0,
                             };
                             current_packet = Some(update_packet_with_count(p, new_count, *index));
@@ -159,6 +163,7 @@ pub fn execute_query(
 
                             if let Some(count) = match p.get_field(*index) {
                                 Some(PacketField::OptionU16(v)) => *v,
+                                Some(PacketField::U16(v)) => Some(*v),
                                 _ => None,
                             } {
                                 sketch.increment(&key, count as u64);
@@ -169,6 +174,7 @@ pub fn execute_query(
 
                             let new_count = current_count + match p.get_field(*index) {
                                 Some(PacketField::OptionU16(v)) => v.unwrap() as u64,
+                                Some(PacketField::U16(v)) => *v as u64,
                                 _ => 0,
                             };
                             current_packet = Some(update_packet_with_count(p, new_count, *index));
@@ -183,6 +189,7 @@ pub fn execute_query(
 
                             if let Some(count) = match p.get_field(*index) {
                                 Some(PacketField::OptionU16(v)) => *v,
+                                Some(PacketField::U16(v)) => Some(*v),
                                 _ => None,
                             } {
                                 sketch.increment(&key, count as u64);
@@ -193,6 +200,7 @@ pub fn execute_query(
 
                             let new_count = current_count + match p.get_field(*index) {
                                 Some(PacketField::OptionU16(v)) => v.unwrap() as u64,
+                                Some(PacketField::U16(v)) => *v as u64,
                                 _ => 0,
                             };
                             current_packet = Some(update_packet_with_count(p, new_count, *index));
@@ -202,10 +210,13 @@ pub fn execute_query(
             }
             Operation::FilterResult { threshold, index } =>  {
                 if let Some(ref p) = current_packet {
+                    // println!("Filter result: {:?}", p);
                     if let Some(count) = match p.get_field(*index) {
                         Some(PacketField::OptionU16(v)) => *v,
+                        Some(PacketField::U16(v)) => Some(*v),
                         _ => None,
                     } {
+                        // println!("Count: {}", count);
                         if count >= *threshold as u16 {
                             // println!("Filter result: {:?}", p);
                         } else {
@@ -217,13 +228,63 @@ pub fn execute_query(
                     }
                 }
             }
-            Operation::Distinct(keys) => {
+            Operation::Distinct { keys, distinct_type } => {
                 if let Some(ref p) = current_packet {
-                    let key = extract_key(p, keys);
-                    if seen.contains(&key) {
-                        current_packet = None;
-                    } else {
-                        seen.insert(key);
+                    let key = generate_key(p, keys);
+
+                    match distinct_type {
+                        ReduceType::CMReduce { memory_in_bytes, depth, seed } => {
+                            let sketch_key = format!("DistinctCMSketch_{}_{}", memory_in_bytes, depth);
+                            let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
+                                Sketch::new_cm_sketch(*memory_in_bytes, *depth, *seed)
+                            });
+
+                            let current_count = sketch.estimate(&key);
+                            if current_count > 0 {
+                                current_packet = None;
+                            } else {
+                                // println!("Distinct packet: {:?}", p);
+                            }
+                        }
+                        ReduceType::FCMReduce { depth, width, seed } => {
+                            let sketch_key = format!("DistinctFCMSketch_{}_{}", depth, width);
+                            let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
+                                Sketch::new_fcm_sketch(*depth, *width, *seed)
+                            });
+
+                            let current_count = sketch.estimate(&key);
+                            if current_count > 0 {
+                                current_packet = None;
+                            } else {
+                                sketch.increment(&key, 1);
+                            }
+                        }
+                        ReduceType::ElasticReduce { depth, width, seed } => {
+                            let sketch_key = format!("DistinctElasticSketch_{}_{}", depth, width);
+                            let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
+                                Sketch::new_elastic_sketch(*depth, *width, *seed)
+                            });
+
+                            let current_count = sketch.estimate(&key);
+                            if current_count > 0 {
+                                current_packet = None;
+                            } else {
+                                sketch.increment(&key, 1);
+                            }
+                        }
+                        ReduceType::DeterministicReduce => {
+                            let sketch_key = "DistinctDeterministicSketch".to_string();
+                            let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
+                                Sketch::new_deterministic_sketch()
+                            });
+
+                            let current_count = sketch.estimate(&key);
+                            if current_count > 0 {
+                                current_packet = None;
+                            } else {
+                                sketch.increment(&key, 1);
+                            }
+                        }
                     }
                 }
             }
@@ -279,7 +340,7 @@ pub fn summarize_epoch(
     query: &QueryPlan,
     timestamp: u64,
     epoch_packets: usize,
-    total_packets: usize,
+    total_packets: usize, 
     flow_counts: &HashMap<(String, String, u16, u16, u8, u16, u8), u64>,
     log_file: &mut std::fs::File,
 ) {
@@ -323,6 +384,7 @@ pub fn summarize_epoch(
 }
 
 fn map_packet(packet: &DynamicPacket, expr: &str) -> DynamicPacket {
+    // println!("before Mapping packet: {:?}", packet);
     let parts: Vec<&str> = expr.trim_matches(|c| c == '(' || c == ')').split(',').map(|s| s.trim()).collect();
     let mut new_packet = DynamicPacket::new(vec![
         PacketField::String("".to_string()), // src_ip
@@ -388,6 +450,7 @@ fn map_packet(packet: &DynamicPacket, expr: &str) -> DynamicPacket {
             
         }
     }
+    // println!("after Mapping packet: {:?}", new_packet);
 
     new_packet
 }

@@ -18,7 +18,10 @@ pub enum Operation {
         index: usize,
     },
     FilterResult { threshold: u64, index: usize },
-    Distinct(Vec<String>),
+    Distinct {
+        keys: Vec<String>,
+        distinct_type: ReduceType,
+    },
     Join {
         left_query: Box<QueryPlan>,
         right_query: Box<QueryPlan>,
