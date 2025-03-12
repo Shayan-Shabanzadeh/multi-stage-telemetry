@@ -116,7 +116,7 @@ pub fn query_8_1() -> QueryPlan {
                 keys: vec!["dst_ip".to_string()],
                 function: "sum".to_string(),
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
-                index: 7,
+                index: 8,
             },
             Operation::FilterResult { threshold: 500 , index: 8 },
         ],
@@ -147,7 +147,7 @@ pub fn query_8() -> QueryPlan {
         operations: vec![
             Operation::Filter(vec![(Field::Protocol, "6".to_string())]), // Filter TCP packets
             Operation::Map("(p.dst_ip, count = p.total_len)".to_string()),
-            Operation::Reduce {
+            Operation::Reduce { 
                 keys: vec!["dst_ip".to_string()],
                 function: "sum".to_string(),
                 reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
@@ -157,16 +157,38 @@ pub fn query_8() -> QueryPlan {
         ],
     };
 
+
+    // let n_bytes_2 = QueryPlan {
+    //     operations: vec![
+    //         Operation::Filter(vec![(Field::Protocol, "6".to_string())]), // Filter TCP packets
+    //         Operation::Map("(p.dst_ip, count = p.total_len)".to_string()),
+    //         Operation::Reduce { 
+    //             keys: vec!["dst_ip".to_string()],
+    //             function: "sum".to_string(),
+    //             reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+    //             index: 8,
+    //         },
+    //         Operation::FilterResult { threshold: 1000 ,index: 8 },
+    //     ],
+    // };
+
     QueryPlan {
         operations: vec![
             Operation::Join {
                 left_query: Box::new(n_bytes),
                 right_query: Box::new(n_conns),
+
+
+                // left_query: Box::new(n_conns),
+                // right_query: Box::new(n_bytes),
+
+
+                // left_query: Box::new(n_bytes),
+                // right_query: Box::new(n_bytes_2),
                 join_keys: vec!["dst_ip".to_string()],
             },
-            Operation::Map("(p.dst_ip, p.count1, p.count2)".to_string()),
-            Operation::Map("(p.dst_ip, p.count1 / p.count2)".to_string()),
-            Operation::FilterResult { threshold: 90  , index: 8},
+            Operation::Map("(p.dst_ip, count1 / count2)".to_string()),
+            Operation::FilterResult { threshold: 90  , index: 10},
             Operation::Map("(p.dst_ip)".to_string()),
         ],
     }

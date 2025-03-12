@@ -200,13 +200,14 @@ pub fn execute_query(
                     }
                 }
             }
-            Operation::FilterResult { threshold, index } => {
+            Operation::FilterResult { threshold, index } =>  {
                 if let Some(ref p) = current_packet {
                     if let Some(count) = match p.get_field(*index) {
                         Some(PacketField::OptionU16(v)) => *v,
                         _ => None,
                     } {
                         if count >= *threshold as u16 {
+                            // println!("Filter result: {:?}", p);
                         } else {
                             current_packet = None;
                         }
@@ -226,14 +227,36 @@ pub fn execute_query(
                     }
                 }
             }
+            // Operation::Join { left_query, right_query, join_keys } => {
+            //      if let Some(ref p) = current_packet {
+            //          let mut left_results = Vec::new();
+            //          let left_result = execute_query(left_query, p.clone(), sketches, ground_truth, &mut left_results);
+            //          let mut right_results = Vec::new();
+            //          let right_result = execute_query(right_query, p.clone(), sketches, ground_truth, &mut right_results);
+     
+            //          if let (Some(left_packet), Some(right_packet)) = (left_result, right_result) {
+            //              let joined_packet = join_packets(&left_packet, &right_packet, join_keys);
+            //              current_packet = Some(joined_packet);
+            //          } else {
+            //              current_packet = None;
+            //          }
+            //      }
+            //  }
+
             Operation::Join { left_query, right_query, join_keys } => {
                 if let Some(ref p) = current_packet {
+                    // Clone sketches for left and right queries
+                    let mut left_sketches = sketches.clone();
+                    let mut right_sketches = sketches.clone();
+            
                     let mut left_results = Vec::new();
-                    let left_result = execute_query(left_query, p.clone(), sketches, ground_truth, &mut left_results);
-
+                    let left_result = execute_query(left_query, p.clone(), &mut left_sketches, ground_truth, &mut left_results);
+                    println!("left_result: {:?}", left_result); // Debug print
+            
                     let mut right_results = Vec::new();
-                    let right_result = execute_query(right_query, p.clone(), sketches, ground_truth, &mut right_results);
-
+                    let right_result = execute_query(right_query, p.clone(), &mut right_sketches, ground_truth, &mut right_results);
+                    println!("right_result: {:?}", right_result); // Debug print
+            
                     if let (Some(left_packet), Some(right_packet)) = (left_result, right_result) {
                         let joined_packet = join_packets(&left_packet, &right_packet, join_keys);
                         current_packet = Some(joined_packet);
@@ -350,7 +373,7 @@ fn map_packet(packet: &DynamicPacket, expr: &str) -> DynamicPacket {
             if kv.len() == 2 {
                 let left = kv[0];
                 let right = kv[1];
-                if left == "p.count1" && right == "p.count2" {
+                if left == "count1" && right == "count2" {
                     if let (Some(PacketField::OptionU16(Some(count1))), Some(PacketField::OptionU16(Some(count2)))) =
                         (packet.get_field(8), packet.get_field(9))
                     {
@@ -360,7 +383,9 @@ fn map_packet(packet: &DynamicPacket, expr: &str) -> DynamicPacket {
                         }
                     }
                 }
+                // println!("new_packet: {:?}", new_packet);
             }
+            
         }
     }
 
@@ -449,8 +474,8 @@ fn extract_key(packet: &DynamicPacket, keys: &Vec<String>) -> Vec<u8> {
 }
 
 fn join_packets(packet1: &DynamicPacket, packet2: &DynamicPacket, join_keys: &Vec<String>) -> DynamicPacket {
-    println!("packet1: {:?}", packet1);
-    println!("packet2: {:?}", packet2);
+    // println!("packet1: {:?}", packet1);
+    // println!("packet2: {:?}", packet2);
     let mut joined_packet = DynamicPacket::new(vec![
         PacketField::String("".to_string()), // src_ip
         PacketField::String("".to_string()), // dst_ip
@@ -462,6 +487,7 @@ fn join_packets(packet1: &DynamicPacket, packet2: &DynamicPacket, join_keys: &Ve
         PacketField::OptionU16(None),        // dns_ns_type
         PacketField::OptionU16(None),        // count1
         PacketField::OptionU16(None),        // count2
+        PacketField::OptionU16(None),        // result
     ]);
 
     // Add fields from packet1 based on join_keys
