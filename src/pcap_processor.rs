@@ -50,13 +50,12 @@ fn get_process_memory_usage() -> u64 {
 }
 
 /// Prints and logs the epoch summary with all src_ip counts exceeding the threshold.
-/// Prints and logs the epoch summary with all src_ip counts exceeding the threshold.
 fn print_epoch_summary(
     timestamp: u64,
     epoch_packets: usize,
     total_packets: usize,
     threshold: usize,
-    ground_truth: &HashMap<String, u64>,
+    ground_truth: &HashMap<String, (u64, u64)>,
     sketches: &HashMap<String, Sketch>,
     log_file: &mut std::fs::File,
 ) {
@@ -67,33 +66,22 @@ fn print_epoch_summary(
     );
 
     let mut valid_entries: Vec<(String, u64, u64)> = ground_truth.iter()
-        .filter(|&(_, &count)| count > threshold as u64)
-        .map(|(key, &real_count)| {
-            let estimated_count = sketches.values().map(|sketch| sketch.estimate(key)).max().unwrap_or(0);
+        .filter(|&(_, &(real_count, estimated_count))| estimated_count > threshold as u64)
+        .map(|(key, &(real_count, estimated_count))| {
             (key.clone(), real_count, estimated_count)
         })
         .collect();
 
     // Sort by estimated count in descending order
-    valid_entries.sort_by(|a, b| b.2.cmp(&a.2));
+    // valid_entries.sort_by(|a, b| b.2.cmp(&a.2));
 
-    summary.push_str("Flow key,Count,Ground Truth\n");
+
+    // Sort by real count in descending order
+    valid_entries.sort_by(|a, b| b.1.cmp(&a.1));
+
+    summary.push_str("Flow key,real_count,estimated_count\n");
     for (key, real_count, estimated_count) in &valid_entries {
-        // println!("valid entry: {:?}", valid_entries); // Debugging statement
-        let dynamic_packet = format!(
-            "({}, {}, {}, {}, {}, {}, {}, {:?})",
-            "", // src_ip
-            key, // dst_ip
-            0, // src_port
-            0, // dst_port
-            0, // tcp_flags
-            0, // total_len
-            0, // protocol
-            None::<u16> // dns_ns_type
-        );
-        let entry = format!("{},{},{}\n", dynamic_packet, real_count, estimated_count);
-        // println!("dynamic_packet: {}", dynamic_packet); // Debugging statement
-        // println!("{}", entry); // Debugging statement
+        let entry = format!("{},{},{}\n", key, real_count, estimated_count);
         summary.push_str(&entry);
     }
 
@@ -116,7 +104,7 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
     let mut sketches: HashMap<String, Sketch> = HashMap::new();
     let mut log_file = initialize_log_file("telemetry_log.csv");
     let mut memory_log_file = initialize_log_file("memory_log.csv"); // New log file for memory usage
-    let mut ground_truth: HashMap<String, u64> = HashMap::new();
+    let mut ground_truth: HashMap<String, (u64, u64)> = HashMap::new();
 
     let mut total_packets = 0;
     let mut epoch_packets = 0;

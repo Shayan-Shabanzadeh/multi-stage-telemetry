@@ -10,9 +10,9 @@ pub fn query_1() -> QueryPlan {
             Operation::Reduce {
                 keys: vec!["dst_ip".to_string()],
                 function: "sum".to_string(),
-                reduce_type: ReduceType::DeterministicReduce,
-                // reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
-                // reduce_type: ReduceType::FCMReduce { depth: 4, width: 1024, seed: 42 },
+                // reduce_type: ReduceType::DeterministicReduce,
+                // reduce_type: ReduceType::CMReduce { memory_in_bytes: 3145728, depth: 3, seed: 42 },
+                reduce_type: ReduceType::FCMReduce { depth: 2, width_l1: 524288, width_l2: 65536, width_l3: 8192, threshold_l1: 254, threshold_l2: 65534, seed: 42 },
                 // reduce_type: ReduceType::ElasticReduce { depth: 4, width: 1024, seed: 42 },
                 index: 8,
 
@@ -29,21 +29,21 @@ pub fn query_2() -> QueryPlan {
         operations: vec![
             Operation::Map("(p.dst_ip, p.src_ip, p.total_len)".to_string()),
             Operation::Distinct {
-                keys: vec!["dst_ip".to_string(), "src_ip".to_string(), "total_len".to_string()],
+                keys: vec!["dst_ip".to_string(), "src_ip".to_string()],
                 distinct_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
             },
             // Operation::Map("(p.dst_ip, p.total_len)".to_string()),
             Operation::Map("(p.dst_ip, p.total_len, count = 1)".to_string()),
             Operation::Reduce {
-                keys: vec!["dst_ip".to_string(), "total_len".to_string()],
+                keys: vec!["dst_ip".to_string()],
                 function: "sum".to_string(),
-                reduce_type: ReduceType::DeterministicReduce,
+                // reduce_type: ReduceType::DeterministicReduce,
                 // reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
-                // reduce_type: ReduceType::FCMReduce { depth: 4, width: 1024, seed: 42 },
+                reduce_type: ReduceType::FCMReduce { depth: 2, width_l1: 524288, width_l2: 65536, width_l3: 8192, threshold_l1: 254, threshold_l2: 65534, seed: 42 },
                 // reduce_type: ReduceType::ElasticReduce { depth: 4, width: 1024, seed: 42 },
                 index: 5,
             },
-            Operation::FilterResult { threshold: 40000000  , index: 5 },
+            Operation::FilterResult { threshold: 10000000  , index: 5 },
             // Operation::Map("(p.dst_ip)".to_string()),
         ],
     }

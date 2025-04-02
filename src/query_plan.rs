@@ -31,7 +31,7 @@ pub enum Operation {
 
 pub enum ReduceType {
     CMReduce { memory_in_bytes: usize, depth: usize, seed: u64 },
-    FCMReduce { depth: usize, width: usize, seed: u64 },
+    FCMReduce {depth: usize, width_l1: usize, width_l2: usize, width_l3: usize, threshold_l1: u32, threshold_l2: u32, seed: u64},
     ElasticReduce { depth: usize, width: usize, seed: u64 },
     DeterministicReduce,
 }

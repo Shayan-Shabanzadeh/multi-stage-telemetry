@@ -15,8 +15,8 @@ impl Sketch {
         Sketch::CMSketch(CMSketch::new(memory_in_bytes, depth, seed))
     }
 
-    pub fn new_fcm_sketch(depth: usize, width: usize, seed: u64) -> Self {
-        Sketch::FCMSketch(FCMSketch::new(depth, width, seed))
+    pub fn new_fcm_sketch(depth: usize, width_l1: usize, width_l2: usize, width_l3: usize, threshold_l1: u32, threshold_l2: u32, seed: u64) -> Self {
+        Sketch::FCMSketch(FCMSketch::new(depth, width_l1, width_l2, width_l3, threshold_l1, threshold_l2, seed))
     }
 
     pub fn new_elastic_sketch(depth: usize, width: usize, seed: u64) -> Self {
@@ -48,7 +48,11 @@ impl Sketch {
     pub fn clear(&mut self) {
         match self {
             Sketch::CMSketch(sketch) => sketch.counters.iter_mut().for_each(|row| row.fill(0)),
-            Sketch::FCMSketch(sketch) => sketch.counters.iter_mut().for_each(|row| row.fill(0)),
+            Sketch::FCMSketch(sketch) => {
+                sketch.counters_l1.iter_mut().for_each(|row| row.fill(0));
+                sketch.counters_l2.iter_mut().for_each(|row| row.fill(0));
+                sketch.counters_l3.iter_mut().for_each(|row| row.fill(0));
+            }
             Sketch::ElasticSketch(sketch) => {
                 sketch.light_counters.iter_mut().for_each(|row| row.fill(0));
                 sketch.heavy_counters.fill(0);

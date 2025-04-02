@@ -35,7 +35,7 @@ pub fn execute_query(
     query: &QueryPlan,
     packet: DynamicPacket,
     sketches: &mut HashMap<String, Sketch>,
-    ground_truth: &mut HashMap<String, u64>,
+    ground_truth: &mut HashMap<String, (u64, u64)>,
     results: &mut Vec<DynamicPacket>,
 ) -> Option<DynamicPacket> {
     let mut current_packet = Some(packet);
@@ -110,8 +110,11 @@ pub fn execute_query(
                                 _ => None,
                             } {
                                 sketch.increment(&key, count as u64);
-                                *ground_truth.entry(key.clone()).or_insert(0) += count as u64;
-                                // println!("ground_truth: {:?}", ground_truth);
+                                let estimated_count = sketch.estimate(&key);
+                                ground_truth.entry(key.clone()).and_modify(|e| {
+                                    e.0 += count as u64;
+                                    e.1 = estimated_count;
+                                }).or_insert((count as u64, estimated_count));
                             } else {
                                 eprintln!("Error reduce: Count value not found in tuple at index {}", index);
                                 return None;
@@ -120,10 +123,10 @@ pub fn execute_query(
                             let new_count = sketch.estimate(&key);
                             current_packet = Some(update_packet_with_count(p, new_count, *index));
                         }
-                        ReduceType::FCMReduce { depth, width, seed } => {
-                            let sketch_key = format!("FCMSketch_{}_{}", depth, width);
+                        ReduceType::FCMReduce { depth, width_l1, width_l2, width_l3, threshold_l1, threshold_l2, seed } => {
+                            let sketch_key = format!("FCMSketch_{}_{}", depth, width_l1);
                             let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
-                                Sketch::new_fcm_sketch(*depth, *width, *seed)
+                                Sketch::new_fcm_sketch(*depth, *width_l1, *width_l2, *width_l3, *threshold_l1, *threshold_l2, *seed)
                             });
 
                             if let Some(count) = match p.get_field(*index) {
@@ -132,7 +135,11 @@ pub fn execute_query(
                                 _ => None,
                             } {
                                 sketch.increment(&key, count as u64);
-                                *ground_truth.entry(key.clone()).or_insert(0) += count as u64;
+                                let estimated_count = sketch.estimate(&key);
+                                ground_truth.entry(key.clone()).and_modify(|e| {
+                                    e.0 += count as u64;
+                                    e.1 = estimated_count;
+                                }).or_insert((count as u64, estimated_count));
                             } else {
                                 eprintln!("Error reduce: Count value not found in tuple at index {}", index);
                                 return None;
@@ -153,14 +160,17 @@ pub fn execute_query(
                                 _ => None,
                             } {
                                 sketch.increment(&key, count as u64);
-                                *ground_truth.entry(key.clone()).or_insert(0) += count as u64;
+                                let estimated_count = sketch.estimate(&key);
+                                ground_truth.entry(key.clone()).and_modify(|e| {
+                                    e.0 += count as u64;
+                                    e.1 = estimated_count;
+                                }).or_insert((count as u64, estimated_count));
                             } else {
                                 eprintln!("Error reduce: Count value not found in tuple at index {}", index);
                                 return None;
                             }
 
-                            let new_count = sketch.estimate(&key);
-                            current_packet = Some(update_packet_with_count(p, new_count, *index));
+                            current_packet = Some(update_packet_with_count(p, sketch.estimate(&key), *index));
                         }
                         ReduceType::DeterministicReduce => {
                             let sketch_key = "DeterministicSketch".to_string();
@@ -174,14 +184,17 @@ pub fn execute_query(
                                 _ => None,
                             } {
                                 sketch.increment(&key, count as u64);
-                                *ground_truth.entry(key.clone()).or_insert(0) += count as u64;
+                                let estimated_count = sketch.estimate(&key);
+                                ground_truth.entry(key.clone()).and_modify(|e| {
+                                    e.0 += count as u64;
+                                    e.1 = estimated_count;
+                                }).or_insert((count as u64, estimated_count));
                             } else {
                                 eprintln!("Error reduce: Count value not found in tuple at index {}", index);
                                 return None;
                             }
 
-                            let new_count = sketch.estimate(&key);
-                            current_packet = Some(update_packet_with_count(p, new_count, *index));
+                            current_packet = Some(update_packet_with_count(p, sketch.estimate(&key), *index));
                         }
                     }
                 }
@@ -220,10 +233,10 @@ pub fn execute_query(
                                 current_packet = None;
                             }
                         }
-                        ReduceType::FCMReduce { depth, width, seed } => {
-                            let sketch_key = format!("DistinctFCMSketch_{}_{}", depth, width);
+                        ReduceType::FCMReduce { depth, width_l1, width_l2, width_l3, threshold_l1, threshold_l2, seed } => {
+                            let sketch_key = format!("DistinctFCMSketch_{}_{}", depth, width_l1);
                             let sketch = sketches.entry(sketch_key.clone()).or_insert_with(|| {
-                                Sketch::new_fcm_sketch(*depth, *width, *seed)
+                                Sketch::new_fcm_sketch(*depth, *width_l1, *width_l2, *width_l3, *threshold_l1, *threshold_l2, *seed)
                             });
 
                             let current_count = sketch.estimate(&key);
