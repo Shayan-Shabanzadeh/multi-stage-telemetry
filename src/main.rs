@@ -7,11 +7,14 @@ mod cm_sketch;
 mod fcm_sketch;
 mod elastic_sketch;
 mod deterministic_sketch;
+mod bloom_filter;
 pub mod bobhash32;
 
 use std::env;
 use pcap_processor::process_pcap;
-use queries::{query_1, query_2, query_3, query_4, query_5, query_8, query_8_1, query_11};
+// use queries::{query_1, query_2, query_3, query_4, query_5, query_8, query_8_1, query_11};
+use queries::{query_1, query_2, query_3, query_4, query_5, query_6 ,query_8};
+
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -32,8 +35,9 @@ fn main() {
         4 => query_4(),
         5 => query_5(),
         8 => query_8(),
-        81 => query_8_1(),
-        11 => query_11(),
+        6 => query_6(),
+        // 81 => query_8_1(),
+        // 11 => query_11(),
         _ => {
             eprintln!("Invalid query ID: {}", query_id);
             return;

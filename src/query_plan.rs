@@ -13,11 +13,10 @@ pub enum Operation {
     Map(String),
     Reduce {
         keys: Vec<String>,
-        function: String,
         reduce_type: ReduceType,
-        index: usize,
+        field_name: String,
     },
-    FilterResult { threshold: u64, index: usize },
+    FilterResult { threshold: u64, field_name: String },
     Distinct {
         keys: Vec<String>,
         distinct_type: ReduceType,
@@ -25,15 +24,26 @@ pub enum Operation {
     Join {
         left_query: Box<QueryPlan>,
         right_query: Box<QueryPlan>,
-        join_keys: Vec<String>,
+        left_keys: Vec<String>,
+        right_keys: Vec<String>, 
     },
+    MapJoin(String),
 }
 
 pub enum ReduceType {
     CMReduce { memory_in_bytes: usize, depth: usize, seed: u64 },
-    FCMReduce {depth: usize, width_l1: usize, width_l2: usize, width_l3: usize, threshold_l1: u32, threshold_l2: u32, seed: u64},
+    FCMReduce {
+        depth: usize,
+        width_l1: usize,
+        width_l2: usize,
+        width_l3: usize,
+        threshold_l1: u32,
+        threshold_l2: u32,
+        seed: u64,
+    },
     ElasticReduce { depth: usize, width: usize, seed: u64 },
     DeterministicReduce,
+    BloomFilter { expected_items: usize, false_positive_rate: f64 },
 }
 
 pub struct QueryPlan {

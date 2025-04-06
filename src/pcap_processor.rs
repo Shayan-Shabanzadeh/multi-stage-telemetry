@@ -1,14 +1,22 @@
 use procfs::process::Process;
 use std::fs::OpenOptions;
 use std::io::Write;
+use lazy_static::lazy_static; // Import the lazy_static macro
+use std::sync::Mutex;
 use std::time::Instant;
 use sysinfo::{System, SystemExt};
 use crate::sketch::Sketch;
 use crate::query_plan::{QueryPlan};
-use crate::query_executor::{DynamicPacket, PacketField, execute_query};
+use crate::query_executor::{PacketField, execute_query};
 use pcap::Capture;
 use pnet::packet::{Packet, ethernet::EthernetPacket, ipv4::Ipv4Packet, tcp::TcpPacket};
 use std::collections::HashMap;
+
+
+lazy_static! {
+    pub static ref EPOCH_RESULTS: Mutex<Vec<HashMap<String, PacketField>>> = Mutex::new(Vec::new());
+}
+
 
 /// Initializes and returns a writable log file.
 fn initialize_log_file(path: &str) -> std::fs::File {
@@ -20,23 +28,23 @@ fn initialize_log_file(path: &str) -> std::fs::File {
         .expect("Cannot open log file")
 }
 
-/// Extracts a `DynamicPacket` from the packet with fields: (src_ip, dst_ip, src_port, dst_port, tcp_flags, total_len, protocol, dns_ns_type)
-fn extract_packet_tuple(packet: &pcap::Packet) -> Option<DynamicPacket> {
+/// Extracts a packet tuple as a `HashMap`.
+fn extract_packet_tuple(packet: &pcap::Packet) -> Option<HashMap<String, PacketField>> {
     let ethernet = EthernetPacket::new(packet.data)?;
     let ipv4 = Ipv4Packet::new(ethernet.payload())?;
 
     if ipv4.get_next_level_protocol() == pnet::packet::ip::IpNextHeaderProtocols::Tcp {
         let tcp = TcpPacket::new(ipv4.payload())?;
-        Some(DynamicPacket::new(vec![
-            PacketField::String(ipv4.get_source().to_string()),
-            PacketField::String(ipv4.get_destination().to_string()),
-            PacketField::U16(tcp.get_source()),
-            PacketField::U16(tcp.get_destination()),
-            PacketField::U8(tcp.get_flags()),
-            PacketField::U16(ipv4.get_total_length()),
-            PacketField::U8(ipv4.get_next_level_protocol().0),
-            PacketField::OptionU16(None), // Initialize dns_ns_type with None
-        ]))
+        let mut packet_map = HashMap::new();
+        packet_map.insert("src_ip".to_string(), PacketField::String(ipv4.get_source().to_string()));
+        packet_map.insert("dst_ip".to_string(), PacketField::String(ipv4.get_destination().to_string()));
+        packet_map.insert("src_port".to_string(), PacketField::U16(tcp.get_source()));
+        packet_map.insert("dst_port".to_string(), PacketField::U16(tcp.get_destination()));
+        packet_map.insert("tcp_flags".to_string(), PacketField::U8(tcp.get_flags()));
+        packet_map.insert("total_len".to_string(), PacketField::U16(ipv4.get_total_length()));
+        packet_map.insert("protocol".to_string(), PacketField::U8(ipv4.get_next_level_protocol().0));
+        packet_map.insert("dns_ns_type".to_string(), PacketField::OptionU16(None));
+        Some(packet_map)
     } else {
         None
     }
@@ -72,10 +80,6 @@ fn print_epoch_summary(
         })
         .collect();
 
-    // Sort by estimated count in descending order
-    // valid_entries.sort_by(|a, b| b.2.cmp(&a.2));
-
-
     // Sort by real count in descending order
     valid_entries.sort_by(|a, b| b.1.cmp(&a.1));
 
@@ -95,15 +99,13 @@ fn print_epoch_summary(
         println!("Successfully wrote to log file."); // Debugging statement
     }
 }
-
-/// Processes the PCAP file and executes the specified query in a streaming manner.
-/// Runs the query line-rate, printing results as soon as conditions are met and providing epoch summaries.
+/// Processes the PCAP file and executes the specified query in a feed forwarding manner.
 pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: QueryPlan) {
     println!("Starting packet processing...");
     let mut cap = Capture::from_file(file_path).expect("Failed to open PCAP file");
     let mut sketches: HashMap<String, Sketch> = HashMap::new();
     let mut log_file = initialize_log_file("telemetry_log.csv");
-    let mut memory_log_file = initialize_log_file("memory_log.csv"); // New log file for memory usage
+    let mut memory_log_file = initialize_log_file("memory_log.csv");
     let mut ground_truth: HashMap<String, (u64, u64)> = HashMap::new();
 
     let mut total_packets = 0;
@@ -123,12 +125,19 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
     let start_time = Instant::now();
 
     while let Ok(packet) = cap.next_packet() {
-        // println!("Processing packet...");
         let packet_timestamp = packet.header.ts.tv_sec as u64;
         current_epoch_start.get_or_insert(packet_timestamp);
 
         if let Some(packet_info) = extract_packet_tuple(&packet) {
-            execute_query(&query, packet_info, &mut sketches, &mut ground_truth, &mut Vec::new());
+            execute_query(
+                &query,
+                packet_info,
+                &mut sketches,
+                &mut ground_truth,
+                epoch_size,  
+                &mut current_epoch_start,  
+                packet_timestamp,         
+            );
         }
 
         total_packets += 1;
