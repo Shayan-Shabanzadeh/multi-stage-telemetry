@@ -121,6 +121,9 @@ pub fn query_5() -> QueryPlan {
     }
 }
 
+
+// Query 6: Detect SYN flood attacks
+// Hosts for which the number of half-open TCP connections exceeds threshold Th.
 pub fn query_6() -> QueryPlan {
     // Query to count SYN packets (TCP flags = 2)
     let n_syn = QueryPlan {
@@ -129,7 +132,7 @@ pub fn query_6() -> QueryPlan {
                 (Field::Protocol, "6".to_string()), // Filter TCP packets
                 (Field::TcpFlag, "2".to_string()),  // Filter SYN packets
             ]),
-            Operation::Map("(dst_ip, count_1 = 1)".to_string()), // Map destination IP with count = 1
+            Operation::Map("(dst_ip, left_count = 1)".to_string()), // Map destination IP with count = 1
             Operation::Reduce {
                 keys: vec!["dst_ip".to_string()], // Group by destination IP
                 reduce_type: ReduceType::CMReduce { 
@@ -137,7 +140,7 @@ pub fn query_6() -> QueryPlan {
                     depth: 3, 
                     seed: 42 
                 },
-                field_name: "count_1".to_string(), // Sum the counts
+                field_name: "left_count".to_string(), // Sum the counts
             },
         ],
     };
@@ -149,7 +152,7 @@ pub fn query_6() -> QueryPlan {
                 (Field::Protocol, "6".to_string()), // Filter TCP packets
                 (Field::TcpFlag, "17".to_string()), // Filter SYN-ACK packets
             ]),
-            Operation::Map("(src_ip, count = 1)".to_string()), // Map source IP with count = 1
+            Operation::Map("(src_ip, right_count = 1)".to_string()), // Map source IP with count = 1
             Operation::Reduce {
                 keys: vec!["src_ip".to_string()], // Group by source IP
                 reduce_type: ReduceType::CMReduce { 
@@ -157,7 +160,7 @@ pub fn query_6() -> QueryPlan {
                     depth: 3, 
                     seed: 42 
                 },
-                field_name: "count".to_string(), // Sum the counts
+                field_name: "right_count".to_string(), // Sum the counts
             },
         ],
     };
@@ -166,14 +169,14 @@ pub fn query_6() -> QueryPlan {
     let syn_flood_victim = QueryPlan {
         operations: vec![
             Operation::Join {
-                left_query: Box::new(n_syn), // Left query: SYN packets
-                right_query: Box::new(n_synack), // Right query: SYN-ACK packets
-                left_keys: vec!["dst_ip".to_string()], // Key for the left query
-                right_keys: vec!["src_ip".to_string()], // Key for the right query
+                left_query: Box::new(n_syn),
+                right_query: Box::new(n_synack),
+                left_keys: vec!["dst_ip".to_string()], 
+                right_keys: vec!["src_ip".to_string()], 
             },
-            Operation::MapJoin("(dst_ip, count = count_left + count_right)".to_string()), // Combine counts
+            Operation::MapJoin("(dst_ip, count = left_count + right_count)".to_string()),
             Operation::FilterResult { 
-                threshold: 3, // Threshold for SYN flood detection
+                threshold: 0,
                 field_name: "count".to_string(),
             },
         ],

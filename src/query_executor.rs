@@ -59,6 +59,51 @@ fn join_packets(
         None
     }
 }
+
+fn evaluate_expression(expr: &str, result: &HashMap<String, PacketField>) -> Option<PacketField> {
+    let tokens: Vec<&str> = expr.split_whitespace().collect();
+    if tokens.len() == 3 {
+        let left_operand = tokens[0];
+        let operator = tokens[1];
+        let right_operand = tokens[2];
+
+        // Retrieve the values of the operands from the result map
+        let left_value = get_field_value(left_operand, result)?;
+        let right_value = get_field_value(right_operand, result)?;
+
+        // Perform the operation
+        match (left_value, right_value) {
+            (PacketField::U16(left), PacketField::U16(right)) => match operator {
+                "+" => Some(PacketField::U16(left + right)),
+                "-" => Some(PacketField::U16(left.saturating_sub(right))),
+                "*" => Some(PacketField::U16(left * right)),
+                "/" => Some(PacketField::U16(if right != 0 { left / right } else { 0 })),
+                _ => None,
+            },
+            (PacketField::U8(left), PacketField::U8(right)) => match operator {
+                "+" => Some(PacketField::U8(left + right)),
+                "-" => Some(PacketField::U8(left.saturating_sub(right))),
+                "*" => Some(PacketField::U8(left * right)),
+                "/" => Some(PacketField::U8(if right != 0 { left / right } else { 0 })),
+                _ => None,
+            },
+            _ => None,
+        }
+    } else {
+        eprintln!("Invalid expression format: {}", expr);
+        None
+    }
+}
+
+fn get_field_value(field: &str, result: &HashMap<String, PacketField>) -> Option<PacketField> {
+    if let Some(value) = result.get(field) {
+        Some(value.clone())
+    } else {
+        eprintln!("Field not found: {}", field);
+        None
+    }
+}
+
 pub fn execute_query(
     query: &QueryPlan,
     packet: HashMap<String, PacketField> ,
@@ -310,10 +355,8 @@ pub fn execute_query(
                 static mut JOIN_TIMESTAMP: Option<u64> = None;
             
                 unsafe {
-                    // Set JOIN_TIMESTAMP if not set yet
                     JOIN_TIMESTAMP.get_or_insert(timestamp);
             
-                    // Execute left and right queries and collect results
                     if let Some(left_result) = execute_query(
                         left_query,
                         current_packet.clone(),
@@ -323,6 +366,7 @@ pub fn execute_query(
                         current_epoch_start,
                         timestamp,
                     ) {
+                        // println!("Left result: {:?}", left_result);
                         LEFT_RESULTS.push(left_result);
                     }
             
@@ -338,10 +382,10 @@ pub fn execute_query(
                         RIGHT_RESULTS.push(right_result);
                     }
             
-                    // Perform join if epoch has passed
                     if timestamp - JOIN_TIMESTAMP.unwrap() >= epoch_size {
                         let mut joined_results = Vec::new();
-            
+                        // println!("LEFT_RESULTS size: {}", LEFT_RESULTS.len());
+                        // println!("RIGHT_RESULTS size: {}", RIGHT_RESULTS.len());
                         for left_packet in &LEFT_RESULTS {
                             if left_packet.is_empty() {
                                 continue;
@@ -354,17 +398,15 @@ pub fn execute_query(
                                 if let Some(joined_packet) = join_packets(left_packet, right_packet, left_keys, right_keys) {
                                     if !joined_packet.is_empty() {
                                         joined_results.push(joined_packet.clone());
-                                        println!("Added to joined_results: {:?}", joined_packet);
+                                        // println!("Added to joined_results: {:?}", joined_packet);
                                     }
                                 }
                             }
                         }
-                        println!("joined_results: {:?}", joined_results);
-            
                         let mut epoch_results = EPOCH_RESULTS.lock().unwrap();
                         epoch_results.clear();
                         epoch_results.extend(joined_results.clone());
-
+                        // println!("EPOCH_RESULTS: {:?}", epoch_results);
                         // Clear for next epoch
                         LEFT_RESULTS.clear();
                         RIGHT_RESULTS.clear();
@@ -389,28 +431,30 @@ pub fn execute_query(
                     continue;
                 }
                 let mut mapped_results = Vec::new();
-
+            
                 for result in epoch_results.iter() {
+                    // println!("Result: {:?}", result);
                     let mut new_result = HashMap::new();
                     let operations: Vec<&str> = expr
                         .trim_matches(|c| c == '(' || c == ')')
                         .split(',')
                         .map(|s| s.trim())
                         .collect();
-
+            
                     for operation in operations {
                         if operation.contains('=') {
                             let parts: Vec<&str> = operation.split('=').map(|s| s.trim()).collect();
                             if parts.len() == 2 {
                                 let key = parts[0];
-                                let value = parts[1];
-
-                                if let Ok(parsed_value) = value.parse::<u16>() {
-                                    new_result.insert(key.to_string(), PacketField::U16(parsed_value));
-                                } else if let Ok(parsed_value) = value.parse::<u8>() {
-                                    new_result.insert(key.to_string(), PacketField::U8(parsed_value));
+                                let value_expr = parts[1];
+            
+                                // Evaluate the expression (e.g., "left.count_left + right.count_right")
+                                let evaluated_value = evaluate_expression(value_expr, result);
+            
+                                if let Some(evaluated_value) = evaluated_value {
+                                    new_result.insert(key.to_string(), evaluated_value);
                                 } else {
-                                    new_result.insert(key.to_string(), PacketField::String(value.to_string()));
+                                    eprintln!("Failed to evaluate expression: {}", value_expr);
                                 }
                             }
                         } else {
@@ -419,14 +463,13 @@ pub fn execute_query(
                             }
                         }
                     }
-
                     mapped_results.push(new_result);
                 }
-
+            
                 // Update EPOCH_RESULTS with the mapped results
                 epoch_results.clear();
                 epoch_results.extend(mapped_results);
-                println!("Mapped results: {:?}", epoch_results);
+                // println!("Mapped results: {:?}", epoch_results);
             }
             
             
