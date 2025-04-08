@@ -176,7 +176,7 @@ pub fn query_6() -> QueryPlan {
             },
             Operation::MapJoin("(dst_ip, count = left_count + right_count)".to_string()),
             Operation::FilterResult { 
-                threshold: 0,
+                threshold: 50,
                 field_name: "count".to_string(),
             },
         ],

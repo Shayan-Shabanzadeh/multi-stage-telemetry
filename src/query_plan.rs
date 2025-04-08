@@ -28,6 +28,7 @@ pub enum Operation {
         right_keys: Vec<String>, 
     },
     MapJoin(String),
+    FilterJoin { threshold: u16, field_name: String },
 }
 
 pub enum ReduceType {

@@ -3,6 +3,15 @@ use crate::sketch::Sketch;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use crate::pcap_processor::EPOCH_RESULTS;
+use lazy_static::lazy_static;
+use std::sync::Mutex;
+
+
+
+lazy_static! {
+    static ref LEFT_RESULTS: Mutex<HashMap<String, HashMap<String, PacketField>>> = Mutex::new(HashMap::new());
+    static ref RIGHT_RESULTS: Mutex<HashMap<String, HashMap<String, PacketField>>> = Mutex::new(HashMap::new());
+}
 
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -24,7 +33,7 @@ fn join_packets(
         eprintln!("Error: Mismatched number of left and right keys.");
         return None;
     }
-
+    
     // Iterate over the key pairs and check if they match
     if left_keys.iter().zip(right_keys.iter()).all(|(left_key, right_key)| {
         match (left_packet.get(left_key), right_packet.get(right_key)) {
@@ -49,7 +58,7 @@ fn join_packets(
         for (key, value) in right_packet {
             joined_packet.entry(key.clone()).or_insert(value.clone());
         }
-        // println!("Join successful. Joined packet: {:?}", joined_packet);
+        println!("Join successful. Joined packet: {:?}", joined_packet);
         Some(joined_packet)
     } else {
         // println!(
@@ -106,9 +115,9 @@ fn get_field_value(field: &str, result: &HashMap<String, PacketField>) -> Option
 
 pub fn execute_query(
     query: &QueryPlan,
-    packet: HashMap<String, PacketField> ,
+    packet: HashMap<String, PacketField>,
     sketches: &mut HashMap<String, Sketch>,
-    ground_truth: &mut HashMap<String, (u64, u64)>,
+    result_map: &mut HashMap<String, HashMap<String, PacketField>>,
     epoch_size: u64,
     current_epoch_start: &mut Option<u64>,
     timestamp: u64,
@@ -197,18 +206,18 @@ pub fn execute_query(
 
             Operation::Reduce { keys, reduce_type, field_name } => {
                 let key = keys
-                    .iter()
-                    .map(|k| {
-                        current_packet.get(k).map_or("".to_string(), |v| match v {
-                            PacketField::String(s) => s.clone(),
-                            PacketField::U16(v) => v.to_string(),
-                            PacketField::U8(v) => v.to_string(),
-                            PacketField::OptionU16(Some(v)) => v.to_string(),
-                            _ => "".to_string(),
-                        })
+                .iter()
+                .map(|k| {
+                    current_packet.get(k).map_or(format!("{}: <missing>", k), |v| match v {
+                        PacketField::String(s) => format!("{}: {}", k, s),
+                        PacketField::U16(v) => format!("{}: {}", k, v),
+                        PacketField::U8(v) => format!("{}: {}", k, v),
+                        PacketField::OptionU16(Some(v)) => format!("{}: {}", k, v),
+                        _ => format!("{}: <invalid>", k),
                     })
-                    .collect::<Vec<_>>()
-                    .join("_");
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
                 let sketch_key = match reduce_type {
                     ReduceType::CMReduce { memory_in_bytes, depth, seed } => {
                         format!("CMSketch_{}_{}", memory_in_bytes, depth)
@@ -266,19 +275,21 @@ pub fn execute_query(
                 if let Some(PacketField::U16(current_value)) = current_packet.get(field_name) {
                     sketch.increment(&key, *current_value as u64);
                     let estimated_count = sketch.estimate(&key);
-            
-                    ground_truth
-                        .entry(key.clone())
-                        .and_modify(|e| {
-                            e.0 += *current_value as u64;
-                            e.1 = estimated_count;
-                        })
-                        .or_insert((*current_value as u64, estimated_count));
-            
+
                     current_packet.insert(
                         field_name.to_string(),
                         PacketField::U16(estimated_count as u16),
                     );
+
+                    result_map
+                    .entry(key.clone())
+                    .and_modify(|existing_packet| {
+                        for (field_key, field_value) in &current_packet {
+                            existing_packet.insert(field_key.clone(), field_value.clone());
+                        }
+                    })
+                    .or_insert(current_packet.clone()); // Insert the entire packet if the key doesn't exist
+            
                 } else {
                     // eprintln!("Error reduce: field '{}' not found or invalid in packet", field_name);
                     return None;
@@ -286,34 +297,43 @@ pub fn execute_query(
             }
             
             
-            Operation::FilterResult { threshold, field_name } => {      
-                if let Some(count) = match current_packet.get(field_name) {
-                    Some(PacketField::OptionU16(Some(v))) => Some(*v),
-                    Some(PacketField::U16(v)) => Some(*v),
-                    _ => None,
-                } {
-                    if count < *threshold as u16 {
-                        // The packet does not meet the threshold, discard it
-                        current_packet.clear();
-                    }
-                } else {
-                    eprintln!("Error filter result: Field '{}' not found or invalid in packet", field_name);
-                    return None;
+            Operation::FilterResult { threshold, field_name } => {
+                // println!("timestamp: {}, current_epoch_start: {:?}", timestamp, current_epoch_start);
+                if timestamp - current_epoch_start.unwrap() >= epoch_size {
+                    result_map.retain(|key, fields| {
+                        // println!("Checking key: '{}', fields: {:?}", key, fields);
+                        if let Some(PacketField::U16(value)) = fields.get(field_name) {
+                            if *value >= *threshold as u16 {
+                                true // Keep the entry
+                            } else {
+                                false // Remove the entry
+                            }
+                        } else {
+                            eprintln!(
+                                "Error filter result: Field '{}' not found or invalid in entry '{}'",
+                                field_name, key
+                            );
+                            false // Remove the entry if the field is missing or invalid
+                        }
+                    });
+                
                 }
             },
             Operation::Distinct { keys, distinct_type } => {
                 // Generate a unique key for the group based on the specified keys
                 let key = keys
-                    .iter()
-                    .map(|k| current_packet.get(k).map_or("".to_string(), |v| match v {
-                        PacketField::String(s) => s.clone(),
-                        PacketField::U16(v) => v.to_string(),
-                        PacketField::U8(v) => v.to_string(),
-                        PacketField::OptionU16(Some(v)) => v.to_string(),
-                        _ => "".to_string(),
-                    }))
-                    .collect::<Vec<String>>()
-                    .join("_");
+                .iter()
+                .map(|k| {
+                    current_packet.get(k).map_or(format!("{}: <missing>", k), |v| match v {
+                        PacketField::String(s) => format!("{}: {}", k, s),
+                        PacketField::U16(v) => format!("{}: {}", k, v),
+                        PacketField::U8(v) => format!("{}: {}", k, v),
+                        PacketField::OptionU16(Some(v)) => format!("{}: {}", k, v),
+                        _ => format!("{}: <invalid>", k),
+                    })
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
                 match distinct_type {
                     ReduceType::BloomFilter { expected_items, false_positive_rate } => {
                         let sketch_key = format!("DistinctBloomFilter_{}_{}", expected_items, false_positive_rate);
@@ -349,127 +369,187 @@ pub fn execute_query(
                 }
             }
             Operation::Join { left_query, right_query, left_keys, right_keys } => {
-                // Static buffers for join
-                static mut LEFT_RESULTS: Vec<HashMap<String, PacketField>> = Vec::new();
-                static mut RIGHT_RESULTS: Vec<HashMap<String, PacketField>> = Vec::new();
-                static mut JOIN_TIMESTAMP: Option<u64> = None;
+
+                let mut join_timestamp: Option<u64> = None;
+                join_timestamp.get_or_insert(timestamp);
             
-                unsafe {
-                    JOIN_TIMESTAMP.get_or_insert(timestamp);
-            
-                    if let Some(left_result) = execute_query(
+                // Execute the left query
+                {
+                    let mut left_results = LEFT_RESULTS.lock().unwrap();
+                    execute_query(
                         left_query,
                         current_packet.clone(),
                         sketches,
-                        ground_truth,
+                        &mut left_results, 
                         epoch_size,
                         current_epoch_start,
                         timestamp,
-                    ) {
-                        // println!("Left result: {:?}", left_result);
-                        LEFT_RESULTS.push(left_result);
-                    }
+                    );
+                }
             
-                    if let Some(right_result) = execute_query(
+                // Execute the right query
+                {
+                    let mut right_results = RIGHT_RESULTS.lock().unwrap();
+                    execute_query(
                         right_query,
                         current_packet.clone(),
                         sketches,
-                        ground_truth,
+                        &mut right_results,
                         epoch_size,
                         current_epoch_start,
                         timestamp,
-                    ) {
-                        RIGHT_RESULTS.push(right_result);
-                    }
+                    );
+                }
+
+
             
-                    if timestamp - JOIN_TIMESTAMP.unwrap() >= epoch_size {
-                        let mut joined_results = Vec::new();
-                        // println!("LEFT_RESULTS size: {}", LEFT_RESULTS.len());
-                        // println!("RIGHT_RESULTS size: {}", RIGHT_RESULTS.len());
-                        for left_packet in &LEFT_RESULTS {
-                            if left_packet.is_empty() {
-                                continue;
-                            }
+                if timestamp - current_epoch_start.unwrap() > epoch_size {
+
+                    let mut joined_results: HashMap<String, HashMap<String, PacketField>> = HashMap::new();
+                        
+                    // Lock both LEFT_RESULTS and RIGHT_RESULTS in a consistent order
+                    let (left_results, right_results) = {
+                        let left_results = LEFT_RESULTS.lock().unwrap();
+                        let right_results = RIGHT_RESULTS.lock().unwrap();
+                        (left_results.clone(), right_results.clone()) // Clone to avoid holding locks during iteration
+                    };
             
-                            for right_packet in &RIGHT_RESULTS {
-                                if right_packet.is_empty() {
-                                    continue;
-                                }
-                                if let Some(joined_packet) = join_packets(left_packet, right_packet, left_keys, right_keys) {
-                                    if !joined_packet.is_empty() {
-                                        joined_results.push(joined_packet.clone());
-                                        // println!("Added to joined_results: {:?}", joined_packet);
+                    for (left_key, left_fields) in &left_results {
+                        for (right_key, right_fields) in &right_results {
+
+                            if left_keys.iter().zip(right_keys.iter()).all(|(left_field, right_field)| {
+                                match (left_fields.get(left_field), right_fields.get(right_field)) {
+                                    (Some(left_value), Some(right_value)) => {
+                                        left_value == right_value
+                                    }
+                                    _ => {
+                                        println!(
+                                            "Fields do not match - left_field: {}, right_field: {}, left_value: {:?}, right_value: {:?}",
+                                            left_field, right_field, left_fields.get(left_field), right_fields.get(right_field)
+                                        );
+                                        false
                                     }
                                 }
+                            }) {
+                                // println!("Fields matched for left_key: {} and right_key: {}", left_key, right_key);
+            
+                                // Perform the join operation
+                                let mut joined_fields = left_fields.clone();
+                                for (key, value) in right_fields {
+                                    // println!("Adding field to joined_fields - key: {}, value: {:?}", key, value);
+                                    joined_fields.entry(key.clone()).or_insert(value.clone());
+                                }
+            
+                                // Add the joined result to the final results
+                                joined_results.insert(left_key.clone(), joined_fields);
+                                // println!("join result: {:?}", joined_results);
+
                             }
                         }
-                        let mut epoch_results = EPOCH_RESULTS.lock().unwrap();
-                        epoch_results.clear();
-                        epoch_results.extend(joined_results.clone());
-                        // println!("EPOCH_RESULTS: {:?}", epoch_results);
-                        // Clear for next epoch
-                        LEFT_RESULTS.clear();
-                        RIGHT_RESULTS.clear();
-                        JOIN_TIMESTAMP = Some(timestamp);
-            
-                        if joined_results.is_empty() {
-                            return None;
-                        } else {
-                            // println!("Joined results: {:?}", joined_results);
-                            current_packet = joined_results[0].clone();
-                        }
-                    } else {
-                        // Skip join this time
-                        return None;
                     }
+
+                    println!("join result :{:?}" , joined_results);
+
+
+                    result_map.clear();
+                    result_map.extend(joined_results);
+                    // println!("result map: {:?}", result_map);
+            
+                    // Clear for the next epoch
+                    {
+                        let mut left_results = LEFT_RESULTS.lock().unwrap();
+                        let mut right_results = RIGHT_RESULTS.lock().unwrap();
+                        left_results.clear();
+                        right_results.clear();
+                    }
+            
+                    join_timestamp = Some(timestamp);
+                } else {
+                    return None;
                 }
             }
             Operation::MapJoin(expr) => {
-                let mut epoch_results = EPOCH_RESULTS.lock().unwrap();
-                if epoch_results.is_empty() {
-                    // println!("EPOCH_RESULTS is empty. Skipping MapJoin operation.");
-                    continue;
-                }
-                let mut mapped_results = Vec::new();
+                if timestamp - current_epoch_start.unwrap_or(0) >= epoch_size {
             
-                for result in epoch_results.iter() {
-                    // println!("Result: {:?}", result);
-                    let mut new_result = HashMap::new();
-                    let operations: Vec<&str> = expr
-                        .trim_matches(|c| c == '(' || c == ')')
-                        .split(',')
-                        .map(|s| s.trim())
-                        .collect();
+                    let mut mapped_results = HashMap::new();
             
-                    for operation in operations {
-                        if operation.contains('=') {
-                            let parts: Vec<&str> = operation.split('=').map(|s| s.trim()).collect();
-                            if parts.len() == 2 {
-                                let key = parts[0];
-                                let value_expr = parts[1];
+                    for (key, result) in result_map.iter() {
+                        // println!("Processing result for key: {:?}, value: {:?}", key, result);
             
-                                // Evaluate the expression (e.g., "left.count_left + right.count_right")
-                                let evaluated_value = evaluate_expression(value_expr, result);
+                        let mut new_result = HashMap::new();
+                        let operations: Vec<&str> = expr
+                            .trim_matches(|c| c == '(' || c == ')')
+                            .split(',')
+                            .map(|s| s.trim())
+                            .collect();
             
-                                if let Some(evaluated_value) = evaluated_value {
-                                    new_result.insert(key.to_string(), evaluated_value);
-                                } else {
-                                    eprintln!("Failed to evaluate expression: {}", value_expr);
+                        for operation in operations {
+                            if operation.contains('=') {
+                                let parts: Vec<&str> = operation.split('=').map(|s| s.trim()).collect();
+                                if parts.len() == 2 {
+                                    let key = parts[0];
+                                    let value_expr = parts[1];
+            
+                                    // Evaluate the expression (e.g., "left.count_left + right.count_right")
+                                    let evaluated_value = evaluate_expression(value_expr, result);
+            
+                                    if let Some(evaluated_value) = evaluated_value {
+                                        new_result.insert(key.to_string(), evaluated_value);
+                                    } else {
+                                        eprintln!("Failed to evaluate expression: {}", value_expr);
+                                    }
+                                }
+                            } else {
+                                if let Some(value) = result.get(operation) {
+                                    new_result.insert(operation.to_string(), value.clone());
                                 }
                             }
-                        } else {
-                            if let Some(value) = result.get(operation) {
-                                new_result.insert(operation.to_string(), value.clone());
-                            }
                         }
+                        mapped_results.insert(key.clone(), new_result);
+
                     }
-                    mapped_results.push(new_result);
-                }
+
+                    // println!("result map: {:?}", result_map);
             
-                // Update EPOCH_RESULTS with the mapped results
-                epoch_results.clear();
-                epoch_results.extend(mapped_results);
-                // println!("Mapped results: {:?}", epoch_results);
+                    // Clear and update result_map with the mapped results
+                    result_map.clear();
+                    result_map.extend(mapped_results);
+            
+                } else {
+                    println!("Epoch not reached. Skipping MapJoin operation.");
+                }
+            }
+            Operation::FilterJoin { threshold, field_name } => {
+                let mut epoch_results = EPOCH_RESULTS.lock().unwrap();
+                if epoch_results.is_empty() {
+                    // println!("EPOCH_RESULTS is empty. Skipping FilterJoin operation.");
+                    continue;
+                }
+
+                // println!("EPOCH_RESULTS : {:?}", epoch_results);    
+                // println!("------------------------");
+            
+                epoch_results.retain(|result| {
+                    if let Some(PacketField::U16(count)) = result.get(field_name) {
+                        if *count >= *threshold {
+                            true 
+                        } else {
+                            // println!(
+                            //     "Filtered out result: {:?} (count: {}, threshold: {})",
+                            //     result, count, threshold
+                            // );
+                            false
+                        }
+                    } else {
+                        println!(
+                            "Field '{}' not found or invalid in result: {:?}",
+                            field_name, result
+                        );
+                        false
+                    }
+                });
+            
+                // println!("Filtered EPOCH_RESULTS: {:?}", epoch_results);
             }
             
             
