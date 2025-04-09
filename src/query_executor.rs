@@ -8,6 +8,7 @@ use std::sync::Mutex;
 
 
 
+
 lazy_static! {
     static ref LEFT_RESULTS: Mutex<HashMap<String, HashMap<String, PacketField>>> = Mutex::new(HashMap::new());
     static ref RIGHT_RESULTS: Mutex<HashMap<String, HashMap<String, PacketField>>> = Mutex::new(HashMap::new());

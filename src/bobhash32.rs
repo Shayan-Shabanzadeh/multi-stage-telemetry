@@ -160,20 +160,20 @@ impl BOBHash32 {
         }
 
         c = c.wrapping_add(str.len() as u32);
-        match len {
-            11 => c = c.wrapping_add((str[i + 10] as u32) << 24),
-            10 => c = c.wrapping_add((str[i + 9] as u32) << 16),
-            9 => c = c.wrapping_add((str[i + 8] as u32) << 8),
-            8 => b = b.wrapping_add((str[i + 7] as u32) << 24),
-            7 => b = b.wrapping_add((str[i + 6] as u32) << 16),
-            6 => b = b.wrapping_add((str[i + 5] as u32) << 8),
-            5 => b = b.wrapping_add(str[i + 4] as u32),
-            4 => a = a.wrapping_add((str[i + 3] as u32) << 24),
-            3 => a = a.wrapping_add((str[i + 2] as u32) << 16),
-            2 => a = a.wrapping_add((str[i + 1] as u32) << 8),
-            1 => a = a.wrapping_add(str[i] as u32),
-            _ => {}
-        }
+
+        // Explicit fall-through logic
+        if len >= 11 { c = c.wrapping_add((str[i + 10] as u32) << 24); }
+        if len >= 10 { c = c.wrapping_add((str[i + 9] as u32) << 16); }
+        if len >= 9  { c = c.wrapping_add((str[i + 8] as u32) << 8); }
+        if len >= 8  { b = b.wrapping_add((str[i + 7] as u32) << 24); }
+        if len >= 7  { b = b.wrapping_add((str[i + 6] as u32) << 16); }
+        if len >= 6  { b = b.wrapping_add((str[i + 5] as u32) << 8); }
+        if len >= 5  { b = b.wrapping_add(str[i + 4] as u32); }
+        if len >= 4  { a = a.wrapping_add((str[i + 3] as u32) << 24); }
+        if len >= 3  { a = a.wrapping_add((str[i + 2] as u32) << 16); }
+        if len >= 2  { a = a.wrapping_add((str[i + 1] as u32) << 8); }
+        if len >= 1  { a = a.wrapping_add(str[i] as u32); }
+
         mix(&mut a, &mut b, &mut c);
         c
     }
@@ -193,6 +193,7 @@ impl BOBHash32 {
     }
 }
 
+#[inline(always)]
 fn mix(a: &mut u32, b: &mut u32, c: &mut u32) {
     *a = a.wrapping_sub(*b).wrapping_sub(*c) ^ (*c >> 13);
     *b = b.wrapping_sub(*c).wrapping_sub(*a) ^ (*a << 8);

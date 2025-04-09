@@ -34,10 +34,8 @@ fn main() {
         3 => query_3(),
         4 => query_4(),
         5 => query_5(),
-        8 => query_8(),
         6 => query_6(),
-        // 81 => query_8_1(),
-        // 11 => query_11(),
+        8 => query_8(),
         _ => {
             eprintln!("Invalid query ID: {}", query_id);
             return;

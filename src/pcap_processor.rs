@@ -1,7 +1,7 @@
 use procfs::process::Process;
 use std::fs::OpenOptions;
 use std::io::Write;
-use lazy_static::lazy_static; // Import the lazy_static macro
+use lazy_static::lazy_static;
 use std::sync::Mutex;
 use std::time::Instant;
 use sysinfo::{System, SystemExt};
@@ -11,7 +11,6 @@ use crate::query_executor::{PacketField, execute_query};
 use pcap::Capture;
 use pnet::packet::{Packet, ethernet::EthernetPacket, ipv4::Ipv4Packet, tcp::TcpPacket};
 use std::collections::HashMap;
-
 
 lazy_static! {
     pub static ref EPOCH_RESULTS: Mutex<Vec<HashMap<String, PacketField>>> = Mutex::new(Vec::new());

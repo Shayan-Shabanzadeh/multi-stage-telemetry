@@ -1,11 +1,9 @@
-# Ignore the target directory
 /target
-
-# Ignore telemetry log files
 /telemetry_log.txt
 /src/telemetry_log.txt
 /src/memory_log.txt
 /telemetry_log.csv  
 /src/telemetry_log.csv
 /src/memory_log.csv
+/src/logs
 /result/
