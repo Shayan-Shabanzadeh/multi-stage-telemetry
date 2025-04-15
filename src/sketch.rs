@@ -39,8 +39,8 @@ impl Sketch {
         Sketch::DeterministicSketch(DeterministicSketch::new())
     }
 
-    pub fn new_bloom_filter(expected_items: usize, false_positive_rate: f64) -> Self {
-        Sketch::BloomFilter(BloomFilter::new(expected_items, false_positive_rate))
+    pub fn new_bloom_filter(size: usize, num_hashes: usize, seed: u64) -> Self {
+        Sketch::BloomFilter(BloomFilter::new(size, num_hashes , seed))
     }
 
     pub fn contains(&self, item: &str) -> bool {

@@ -1,9 +1,18 @@
 use std::collections::HashSet;
-use std::convert::TryInto;
+use crate::bobhash32::BOBHash32;
 
-type FCMSK_C1 = u8;   // 8-bit
-type FCMSK_C2 = u16;  // 16-bit
-type FCMSK_C3 = u32;  // 32-bit
+const FCMSK_DEPTH: usize = 2; // Number of trees
+const FCMSK_LEVEL: usize = 3; // Number of layers in trees
+const FCMSK_K_ARY: usize = 8; // k-ary tree
+const FCMSK_K_POW: usize = 3; // 2^3 = 8
+const FCMSK_WL1: usize = 524288; // Width of layer 1
+const FCMSK_WL2: usize = 65536;  // Width of layer 2
+const FCMSK_WL3: usize = 8192;   // Width of layer 3
+const HH_THRESHOLD: u32 = 10000; // Heavy hitter threshold
+
+type FCMSK_C1 = u8;  // 8-bit
+type FCMSK_C2 = u16; // 16-bit
+type FCMSK_C3 = u32; // 32-bit
 
 pub struct FCMSketch {
     pub depth: usize,
@@ -15,7 +24,7 @@ pub struct FCMSketch {
     pub counters_l1: Vec<Vec<FCMSK_C1>>,
     pub counters_l2: Vec<Vec<FCMSK_C2>>,
     pub counters_l3: Vec<Vec<FCMSK_C3>>,
-    pub hash_seeds: Vec<u32>,
+    pub hash_functions: Vec<BOBHash32>,
     pub hh_candidates: HashSet<u32>,
     pub cumul_l2: u32,
     pub cumul_l3: u32,
@@ -23,10 +32,11 @@ pub struct FCMSketch {
 
 impl FCMSketch {
     pub fn new(depth: usize, width_l1: usize, width_l2: usize, width_l3: usize, threshold_l1: u32, threshold_l2: u32, seed: u64) -> Self {
-        let mut hash_seeds = Vec::with_capacity(depth);
+        let mut hash_functions = Vec::with_capacity(depth);
         for i in 0..depth {
-            hash_seeds.push((seed as u32).wrapping_add(i as u32));
+            hash_functions.push(BOBHash32::new((seed as u32) + i as u32));
         }
+
         Self {
             depth,
             width_l1,
@@ -37,7 +47,7 @@ impl FCMSketch {
             counters_l1: vec![vec![0; width_l1]; depth],
             counters_l2: vec![vec![0; width_l2]; depth],
             counters_l3: vec![vec![0; width_l3]; depth],
-            hash_seeds,
+            hash_functions,
             hh_candidates: HashSet::new(),
             cumul_l2: threshold_l1,
             cumul_l3: threshold_l1 + threshold_l2,
@@ -50,20 +60,21 @@ impl FCMSketch {
         let mut hh_flag = true;
 
         for d in 0..self.depth {
-            hash_index[d] = self.hash(item, self.hash_seeds[d]) % self.width_l1;
+            hash_index[d] = self.hash_functions[d].run(item) as usize % self.width_l1;
         }
 
         for d in 0..self.depth {
             ret_val[d] = self.increment_counter_l1(d, hash_index[d], count);
             if ret_val[d] > self.threshold_l1 {
-                hash_index[d] = hash_index[d] >> 3; // FCMSK_K_POW = 3 for 8-ary tree
+                hash_index[d] >>= FCMSK_K_POW;
                 ret_val[d] = self.increment_counter_l2(d, hash_index[d], count) + self.cumul_l2;
+
                 if ret_val[d] > self.threshold_l2 {
-                    hash_index[d] = hash_index[d] >> 3; // FCMSK_K_POW = 3 for 8-ary tree
+                    hash_index[d] >>= FCMSK_K_POW;
                     ret_val[d] = self.increment_counter_l3(d, hash_index[d], count) + self.cumul_l3;
                 }
             }
-            if ret_val[d] <= 10000 {
+            if ret_val[d] <= HH_THRESHOLD {
                 hh_flag = false;
             }
         }
@@ -81,16 +92,17 @@ impl FCMSketch {
         let mut count_query = u32::MAX;
 
         for d in 0..self.depth {
-            hash_index[d] = self.hash(item, self.hash_seeds[d]) % self.width_l1;
+            hash_index[d] = self.hash_functions[d].run(item) as usize % self.width_l1;
         }
 
         for d in 0..self.depth {
             ret_val[d] = self.query_counter_l1(d, hash_index[d]);
             if ret_val[d] > self.threshold_l1 {
-                hash_index[d] = hash_index[d] >> 3; // FCMSK_K_POW = 3 for 8-ary tree
+                hash_index[d] >>= FCMSK_K_POW;
                 ret_val[d] = self.query_counter_l2(d, hash_index[d]) + self.cumul_l2;
+
                 if ret_val[d] > self.threshold_l2 {
-                    hash_index[d] = hash_index[d] >> 3; // FCMSK_K_POW = 3 for 8-ary tree
+                    hash_index[d] >>= FCMSK_K_POW;
                     ret_val[d] = self.query_counter_l3(d, hash_index[d]) + self.cumul_l3;
                 }
             }
@@ -139,13 +151,5 @@ impl FCMSketch {
 
     fn query_counter_l3(&self, depth: usize, index: usize) -> u32 {
         self.counters_l3[depth][index] as u32
-    }
-
-    fn hash(&self, item: &[u8], seed: u32) -> usize {
-        let mut hash = seed;
-        for &byte in item {
-            hash = hash.wrapping_mul(31).wrapping_add(byte as u32);
-        }
-        hash as usize
     }
 }

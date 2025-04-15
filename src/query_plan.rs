@@ -44,7 +44,7 @@ pub enum ReduceType {
     },
     ElasticReduce { depth: usize, width: usize, seed: u64 },
     DeterministicReduce,
-    BloomFilter { expected_items: usize, false_positive_rate: f64 },
+    BloomFilter {size: usize, num_hashes: usize, seed: u64},
 }
 
 pub struct QueryPlan {

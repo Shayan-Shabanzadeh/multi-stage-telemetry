@@ -300,7 +300,7 @@ pub fn execute_query(
             
             Operation::FilterResult { threshold, field_name } => {
                 // println!("timestamp: {}, current_epoch_start: {:?}", timestamp, current_epoch_start);
-                if timestamp - current_epoch_start.unwrap() >= epoch_size {
+                if timestamp - current_epoch_start.unwrap() >= epoch_size -1  {
                     result_map.retain(|key, fields| {
                         // println!("Checking key: '{}', fields: {:?}", key, fields);
                         if let Some(PacketField::U16(value)) = fields.get(field_name) {
@@ -336,14 +336,15 @@ pub fn execute_query(
                 .collect::<Vec<_>>()
                 .join(", ");
                 match distinct_type {
-                    ReduceType::BloomFilter { expected_items, false_positive_rate } => {
-                        let sketch_key = format!("DistinctBloomFilter_{}_{}", expected_items, false_positive_rate);
+                    ReduceType::BloomFilter { size, num_hashes, seed } => {
+                        let sketch_key = format!("DistinctBloomFilter_{}_{}", size, num_hashes);
                         let bloom_filter = sketches.entry(sketch_key.clone()).or_insert_with(|| {
-                            Sketch::new_bloom_filter(*expected_items, *false_positive_rate)
+                            Sketch::new_bloom_filter(*size, *num_hashes, *seed)
                         });
             
                         if bloom_filter.contains(&key) {
                             current_packet.clear();
+
                             return None;
                         } else {
                             bloom_filter.insert(&key);

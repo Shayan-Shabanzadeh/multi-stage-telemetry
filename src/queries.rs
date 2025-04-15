@@ -10,13 +10,9 @@ pub fn query_1() -> QueryPlan {
             Operation::Reduce {
                 keys: vec!["dst_ip".to_string()],
                 // reduce_type: ReduceType::DeterministicReduce,
-                reduce_type: ReduceType::CMReduce { memory_in_bytes: 524288, depth: 3, seed: 42 },
-                // 1572864 bytes = 1.5 MB
-                // 524288 bytes = 512 KB
-                // 65536 bytes = 64 KB
-                // 8192 bytes = 8 KB
-                // reduce_type: ReduceType::FCMReduce { depth: 2, width_l1: 524288, width_l2: 65536, width_l3: 8192, threshold_l1: 254, threshold_l2: 65534, seed: 42 },
-                // reduce_type: ReduceType::ElasticReduce { depth: 4, width: 524288, seed: 42 },
+                // reduce_type: ReduceType::CMReduce { memory_in_bytes: 516096, depth: 3, seed: 42 },
+                reduce_type: ReduceType::FCMReduce { depth: 2, width_l1: 196608, width_l2: 24576, width_l3: 3072, threshold_l1: 254, threshold_l2: 65534, seed: 42 },
+                // reduce_type: ReduceType::ElasticReduce { depth: 4, width: 516096, seed: 42 },
                 field_name: "count".to_string(),
             },
             Operation::FilterResult { threshold: 40 , field_name: "count".to_string() },
@@ -42,7 +38,7 @@ pub fn query_2() -> QueryPlan {
             Operation::Reduce {
                 keys: vec!["dst_ip".to_string(), "total_len".to_string()],
                 // reduce_type: ReduceType::DeterministicReduce,
-                // reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
+                // reduce_type: ReduceType::CMReduce { memory_in_bytes: 524288, depth: 3, seed: 42 },
                 reduce_type: ReduceType::FCMReduce { depth: 2, width_l1: 524288, width_l2: 65536, width_l3: 8192, threshold_l1: 254, threshold_l2: 65534, seed: 42 },
                 // reduce_type: ReduceType::ElasticReduce { depth: 4, width: 1024, seed: 42 },
                 field_name: "count".to_string(),
@@ -63,16 +59,17 @@ pub fn query_3() -> QueryPlan {
                 keys: vec!["dst_ip".to_string(), "src_ip".to_string()],
                 distinct_type: ReduceType::DeterministicReduce,
                 // distinct_type: ReduceType::BloomFilter {
-                //     expected_items: 100000000,
-                //     false_positive_rate: 0.01, 
+                //     size: 819200,
+                //     num_hashes: 5, 
+                //     seed: 42,
                 // },
             },
             Operation::Map("(src_ip, count = 1)".to_string()),
             Operation::Reduce {
                 keys: vec!["src_ip".to_string()],
-                reduce_type: ReduceType::DeterministicReduce,
-                // reduce_type: ReduceType::CMReduce { memory_in_bytes: 4096, depth: 4, seed: 42 },
-                // reduce_type: ReduceType::FCMReduce { depth: 4, width: 1024, seed: 42 },
+                // reduce_type: ReduceType::DeterministicReduce,
+                reduce_type: ReduceType::CMReduce { memory_in_bytes: 524288, depth: 3, seed: 42 },
+                // reduce_type: ReduceType::FCMReduce { depth: 2, width_l1: 196608, width_l2: 24576, width_l3: 3072, threshold_l1: 254, threshold_l2: 65534, seed: 42 },
                 // reduce_type: ReduceType::ElasticReduce { depth: 4, width: 1024, seed: 42 },
                 field_name: "count".to_string(),
             },

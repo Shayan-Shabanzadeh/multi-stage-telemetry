@@ -147,9 +147,9 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
             );
         }
 
-        if packet_timestamp - current_epoch_start.unwrap() > epoch_size {
+        if packet_timestamp - current_epoch_start.unwrap() >= epoch_size {
+            
             // Trigger the join operation before updating the epoch start time
-            println!("Epoch boundary reached. Executing join operation...");
             epoch_count += 1;
 
             // Refresh memory usage
@@ -190,30 +190,47 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
     }
 
     // Final epoch summary for any remaining packets
-    if let Some(epoch_start) = current_epoch_start {
-        if epoch_packets > 0 {
-            epoch_count += 1;
-            sys.refresh_memory(); 
-            let memory_used = get_process_memory_usage(); 
-            let total_memory = sys.total_memory();
-            let available_memory = sys.available_memory();
+if let Some(epoch_start) = current_epoch_start {
+    if epoch_packets > 0 {
+        epoch_count += 1;
+        sys.refresh_memory();
+        let memory_used = get_process_memory_usage();
+        let total_memory = sys.total_memory();
+        let available_memory = sys.available_memory();
 
-            print_epoch_summary(
-                epoch_start,
-                epoch_packets,
-                total_packets,
-                threshold,
-                &result_map,
-                &sketches,
-                &mut log_file,
-            );
-
-            // Log memory usage to the new log file
-            if let Err(e) = writeln!(memory_log_file, "{},{},{},{},{}", epoch_count, epoch_start, memory_used, total_memory, available_memory) {
-                eprintln!("Failed to write memory usage to memory log file: {}", e);
+        // Manually filter the result_map for the last epoch
+        result_map.retain(|key, fields| {
+            if let Some(PacketField::U16(value)) = fields.get("count") {
+                *value >= threshold as u16 // Retain only if count >= threshold
+            } else {
+                eprintln!(
+                    "Error: Field 'count' not found or invalid in entry '{}'",
+                    key
+                );
+                false // Remove the entry if the field is missing or invalid
             }
+        });
+
+        print_epoch_summary(
+            epoch_start,
+            epoch_packets,
+            total_packets,
+            threshold,
+            &result_map,
+            &sketches,
+            &mut log_file,
+        );
+
+        // Log memory usage to the new log file
+        if let Err(e) = writeln!(
+            memory_log_file,
+            "{},{},{},{},{}",
+            epoch_count, epoch_start, memory_used, total_memory, available_memory
+        ) {
+            eprintln!("Failed to write memory usage to memory log file: {}", e);
         }
     }
+}
 
     // Stop the timer
     let elapsed_time = start_time.elapsed();
