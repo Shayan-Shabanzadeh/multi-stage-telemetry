@@ -1,13 +1,8 @@
 use std::collections::HashSet;
 use crate::bobhash32::BOBHash32;
 
-const FCMSK_DEPTH: usize = 2; // Number of trees
-const FCMSK_LEVEL: usize = 3; // Number of layers in trees
 const FCMSK_K_ARY: usize = 8; // k-ary tree
 const FCMSK_K_POW: usize = 3; // 2^3 = 8
-const FCMSK_WL1: usize = 524288; // Width of layer 1
-const FCMSK_WL2: usize = 65536;  // Width of layer 2
-const FCMSK_WL3: usize = 8192;   // Width of layer 3
 const HH_THRESHOLD: u32 = 10000; // Heavy hitter threshold
 
 type FCMSK_C1 = u8;  // 8-bit
