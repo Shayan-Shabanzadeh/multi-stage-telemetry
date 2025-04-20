@@ -1,12 +1,10 @@
-use procfs::process::Process;
 use std::fs::OpenOptions;
 use std::io::Write;
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 use std::time::Instant;
-use sysinfo::{System, SystemExt};
 use crate::sketch::Sketch;
-use crate::query_plan::{QueryPlan};
+use crate::query_plan::QueryPlan;
 use crate::query_executor::{PacketField, execute_query};
 use pcap::Capture;
 use pnet::packet::{Packet, ethernet::EthernetPacket, ipv4::Ipv4Packet, tcp::TcpPacket};
@@ -49,21 +47,15 @@ fn extract_packet_tuple(packet: &pcap::Packet) -> Option<HashMap<String, PacketF
     }
 }
 
-/// Gets the memory usage of the current process in KB.
-fn get_process_memory_usage() -> u64 {
-    let pid = std::process::id();
-    let process = Process::new(pid as i32).expect("Failed to get process info");
-    process.stat.vsize / 1024 // Convert from bytes to KB
-}
 /// Prints and logs the epoch summary with all src_ip counts exceeding the threshold.
 fn print_epoch_summary(
     timestamp: u64,
     epoch_packets: usize,
     total_packets: usize,
-    threshold: usize,
     result_map: &HashMap<String, HashMap<String, PacketField>>, // Updated type
-    sketches: &HashMap<String, Sketch>,
     log_file: &mut std::fs::File,
+    field_name: &str,
+    threshold: u16, // Add threshold as a parameter
 ) {
     println!("Logging epoch summary...");
     let mut summary = format!(
@@ -72,25 +64,29 @@ fn print_epoch_summary(
     );
 
     // Add the header for the table
-    summary.push_str("flow_key, count\n");
+    summary.push_str("flow_key, value\n");
 
-    // Collect entries and sort them by the "count" field in descending order
+    // Collect entries, filter by threshold, and sort them by the specified field in descending order
     let mut entries: Vec<(String, u16)> = result_map
         .iter()
         .filter_map(|(key, fields)| {
-            if let Some(PacketField::U16(count)) = fields.get("count") {
-                Some((key.clone(), *count))
+            if let Some(PacketField::U16(value)) = fields.get(field_name) {
+                if *value > threshold {
+                    Some((key.clone(), *value)) // Include only if value > threshold
+                } else {
+                    None
+                }
             } else {
                 None
             }
         })
         .collect();
 
-    entries.sort_by(|a, b| b.1.cmp(&a.1)); // Sort by count in descending order
+    entries.sort_by(|a, b| b.1.cmp(&a.1)); // Sort by value in descending order
 
     // Format the sorted entries
-    for (key, count) in &entries {
-        summary.push_str(&format!("{}, {}\n", key, count));
+    for (key, value) in &entries {
+        summary.push_str(&format!("{}, {}\n", key, value));
     }
 
     if entries.is_empty() {
@@ -111,21 +107,12 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
     let mut cap = Capture::from_file(file_path).expect("Failed to open PCAP file");
     let mut sketches: HashMap<String, Sketch> = HashMap::new();
     let mut log_file = initialize_log_file("telemetry_log.csv");
-    let mut memory_log_file = initialize_log_file("memory_log.csv");
     let mut result_map: HashMap<String, HashMap<String, PacketField>> = HashMap::new();
 
     let mut total_packets = 0;
     let mut epoch_packets = 0;
     let mut current_epoch_start: Option<u64> = None;
     let mut epoch_count = 0;
-
-    // Initialize the system for memory usage tracking
-    let mut sys = System::new();
-
-    // Write header to memory log file
-    if let Err(e) = writeln!(memory_log_file, "Epoch,Timestamp,ProcessMemoryUsedKB,TotalMemoryKB,AvailableMemoryKB") {
-        eprintln!("Failed to write header to memory log file: {}", e);
-    }
 
     // Start the timer
     let start_time = Instant::now();
@@ -152,27 +139,18 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
             // Trigger the join operation before updating the epoch start time
             epoch_count += 1;
 
-            // Refresh memory usage
-            sys.refresh_memory();
-            let memory_used = get_process_memory_usage();
-            let total_memory = sys.total_memory();
-            let available_memory = sys.available_memory();
+
 
             // Print and log the epoch summary
             print_epoch_summary(
                 packet_timestamp,
                 epoch_packets,
                 total_packets,
-                threshold,
                 &result_map,
-                &sketches,
                 &mut log_file,
+                "total_len", // Field name to check against the threshold
+                threshold as u16,
             );
-
-            // Log memory usage to the new log file
-            if let Err(e) = writeln!(memory_log_file, "{},{},{},{},{}", epoch_count, packet_timestamp, memory_used, total_memory, available_memory) {
-                eprintln!("Failed to write memory usage to memory log file: {}", e);
-            }
 
             // Clear sketches and result map for the new epoch
             sketches.values_mut().for_each(|sketch| sketch.clear());
@@ -193,42 +171,17 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
 if let Some(epoch_start) = current_epoch_start {
     if epoch_packets > 0 {
         epoch_count += 1;
-        sys.refresh_memory();
-        let memory_used = get_process_memory_usage();
-        let total_memory = sys.total_memory();
-        let available_memory = sys.available_memory();
 
-        // Manually filter the result_map for the last epoch
-        result_map.retain(|key, fields| {
-            if let Some(PacketField::U16(value)) = fields.get("count") {
-                *value >= threshold as u16 // Retain only if count >= threshold
-            } else {
-                eprintln!(
-                    "Error: Field 'count' not found or invalid in entry '{}'",
-                    key
-                );
-                false // Remove the entry if the field is missing or invalid
-            }
-        });
 
         print_epoch_summary(
             epoch_start,
             epoch_packets,
             total_packets,
-            threshold,
             &result_map,
-            &sketches,
             &mut log_file,
+            "total_len", // Field name to check against the threshold
+            threshold as u16,
         );
-
-        // Log memory usage to the new log file
-        if let Err(e) = writeln!(
-            memory_log_file,
-            "{},{},{},{},{}",
-            epoch_count, epoch_start, memory_used, total_memory, available_memory
-        ) {
-            eprintln!("Failed to write memory usage to memory log file: {}", e);
-        }
     }
 }
 
@@ -237,18 +190,15 @@ if let Some(epoch_start) = current_epoch_start {
     let elapsed_seconds = elapsed_time.as_secs_f64();
     let packets_per_second = total_packets as f64 / elapsed_seconds;
     let average_packets_per_epoch = total_packets as f64 / epoch_count as f64;
-    sys.refresh_memory(); 
-    let peak_memory = get_process_memory_usage(); 
 
     println!("Finished packet processing.");
     println!("Total packets processed: {}", total_packets);
     println!("Elapsed time: {:.2} seconds", elapsed_seconds);
     println!("Average packets per second: {:.2}", packets_per_second);
     println!("Average packets per epoch: {:.2}", average_packets_per_epoch);
-    println!("Peak memory usage: {} KB", peak_memory); 
 
-    if let Err(e) = writeln!(log_file, "\n=== PERFORMANCE METRICS ===\nTotal packets processed: {}\nElapsed time: {:.2} seconds\nAverage packets per second: {:.2}\nAverage packets per epoch: {:.2}\nPeak memory usage: {} KB\n",
-        total_packets, elapsed_seconds, packets_per_second, average_packets_per_epoch, peak_memory) {
+    if let Err(e) = writeln!(log_file, "\n=== PERFORMANCE METRICS ===\nTotal packets processed: {}\nElapsed time: {:.2} seconds\nAverage packets per second: {:.2}\nAverage packets per epoch: {:.2}\n",
+        total_packets, elapsed_seconds, packets_per_second, average_packets_per_epoch) {
         eprintln!("Failed to write performance metrics to log file: {}", e);
     } else {
         println!("Successfully wrote performance metrics to log file.");

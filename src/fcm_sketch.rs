@@ -53,29 +53,32 @@ impl FCMSketch {
         let mut hash_index = vec![0; self.depth];
         let mut ret_val = vec![0; self.depth];
         let mut hh_flag = true;
-
+    
         for d in 0..self.depth {
             hash_index[d] = self.hash_functions[d].run(item) as usize % self.width_l1;
         }
-
+    
         for d in 0..self.depth {
             ret_val[d] = self.increment_counter_l1(d, hash_index[d], count);
+    
             if ret_val[d] > self.threshold_l1 {
-                hash_index[d] >>= FCMSK_K_POW;
-                ret_val[d] = self.increment_counter_l2(d, hash_index[d], count) + self.cumul_l2;
-
+                let idx_l2 = hash_index[d] / FCMSK_K_ARY;  // <-- Corrected to match C++ (division)
+                ret_val[d] = self.increment_counter_l2(d, idx_l2, count) + self.cumul_l2;
+    
                 if ret_val[d] > self.threshold_l2 {
-                    hash_index[d] >>= FCMSK_K_POW;
-                    ret_val[d] = self.increment_counter_l3(d, hash_index[d], count) + self.cumul_l3;
+                    let idx_l3 = idx_l2 / FCMSK_K_ARY;  // <-- Corrected to match C++ (division)
+                    ret_val[d] = self.increment_counter_l3(d, idx_l3, count) + self.cumul_l3;
                 }
             }
+    
             if ret_val[d] <= HH_THRESHOLD {
                 hh_flag = false;
             }
         }
-
+    
         if hh_flag {
-            if let Ok(item_u32) = item.try_into().map(u32::from_ne_bytes) {
+            if item.len() == 4 {
+                let item_u32 = u32::from_be_bytes(item.try_into().unwrap());  // <-- Changed from_ne_bytes to from_be_bytes to match network byte-order conversion in C++
                 self.hh_candidates.insert(item_u32);
             }
         }
@@ -85,27 +88,30 @@ impl FCMSketch {
         let mut hash_index = vec![0; self.depth];
         let mut ret_val = vec![0; self.depth];
         let mut count_query = u32::MAX;
-
+    
         for d in 0..self.depth {
             hash_index[d] = self.hash_functions[d].run(item) as usize % self.width_l1;
         }
-
+    
         for d in 0..self.depth {
             ret_val[d] = self.query_counter_l1(d, hash_index[d]);
+    
             if ret_val[d] > self.threshold_l1 {
-                hash_index[d] >>= FCMSK_K_POW;
-                ret_val[d] = self.query_counter_l2(d, hash_index[d]) + self.cumul_l2;
-
+                let idx_l2 = hash_index[d] / FCMSK_K_ARY;  // <-- Corrected to match C++ (division)
+                ret_val[d] = self.query_counter_l2(d, idx_l2) + self.cumul_l2;
+    
                 if ret_val[d] > self.threshold_l2 {
-                    hash_index[d] >>= FCMSK_K_POW;
-                    ret_val[d] = self.query_counter_l3(d, hash_index[d]) + self.cumul_l3;
+                    let idx_l3 = idx_l2 / FCMSK_K_ARY;  // <-- Corrected to match C++ (division)
+                    ret_val[d] = self.query_counter_l3(d, idx_l3) + self.cumul_l3;
                 }
             }
+    
             count_query = count_query.min(ret_val[d]);
         }
-
+    
         count_query
     }
+    
 
     pub fn get_cardinality(&self) -> i32 {
         let mut avgnum_empty_counter = 0;

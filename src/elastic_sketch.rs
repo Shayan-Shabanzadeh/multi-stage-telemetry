@@ -73,14 +73,6 @@ impl ElasticSketch {
         count_query
     }
 
-    pub fn get_cardinality(&self) -> i32 {
-        let mut avgnum_empty_counter = 0;
-        for d in 0..self.depth {
-            avgnum_empty_counter += self.light_counters[d].iter().filter(|&&x| x == 0).count();
-        }
-        (self.width as f64 * (self.width as f64 / avgnum_empty_counter as f64).ln()) as i32
-    }
-
     fn increment_light_counter(&mut self, depth: usize, index: usize, count: u32) -> u32 {
         let old_val = self.light_counters[depth][index];
         let new_val = old_val.saturating_add(count);

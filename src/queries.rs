@@ -57,30 +57,30 @@ pub fn query_3() -> QueryPlan {
             Operation::Map("(dst_ip, src_ip)".to_string()),
             Operation::Distinct {
                 keys: vec!["dst_ip".to_string(), "src_ip".to_string()],
-                distinct_type: ReduceType::DeterministicReduce,
-                // distinct_type: ReduceType::BloomFilter {
-                //     size: 819200,
-                //     num_hashes: 5, 
-                //     seed: 42,
-                // },
+                // distinct_type: ReduceType::DeterministicReduce,
+                distinct_type: ReduceType::BloomFilter {
+                    size: 819200,
+                    num_hashes: 5, 
+                    seed: 42,
+                },
             },
             Operation::Map("(src_ip, count = 1)".to_string()),
             Operation::Reduce {
                 keys: vec!["src_ip".to_string()],
                 // reduce_type: ReduceType::DeterministicReduce,
-                // reduce_type: ReduceType::CMReduce { memory_in_bytes: 102400, depth: 3, seed: 42 },
+                reduce_type: ReduceType::CMReduce { memory_in_bytes: 102400, depth: 3, seed: 42 },
                 // 256 KB = 65536 * 1 + 8192 * 2 + 1024 * 4
                 // reduce_type: ReduceType::FCMReduce { depth: 2, width_l1: 65536, width_l2: 8192, width_l3: 1024, threshold_l1: 254, threshold_l2: 65534, seed: 42 },
                 // 100 KB = 32768 * 1 + 4096 * 2 + 512 * 4
-                reduce_type: ReduceType::FCMReduce {
-                    depth: 2,
-                    width_l1: 32768,  // Width of layer 1 (2^15)
-                    width_l2: 4096,   // Width of layer 2 (2^12)
-                    width_l3: 512,    // Width of layer 3 (2^9)
-                    threshold_l1: 254,
-                    threshold_l2: 65534,
-                    seed: 42,
-                },
+                // reduce_type: ReduceType::FCMReduce {
+                //     depth: 2,
+                //     width_l1: 32768,  // Width of layer 1 (2^15)
+                //     width_l2: 4096,   // Width of layer 2 (2^12)
+                //     width_l3: 512,    // Width of layer 3 (2^9)
+                //     threshold_l1: 254,
+                //     threshold_l2: 65534,
+                //     seed: 42,
+                // },
                 // reduce_type: ReduceType::ElasticReduce { depth: 4, width: 1024, seed: 42 },
                 field_name: "count".to_string(),
             },
@@ -101,7 +101,7 @@ pub fn query_4() -> QueryPlan {
                 keys: vec!["src_ip".to_string(), "dst_port".to_string()],
                 // distinct_type: ReduceType::DeterministicReduce,
                 distinct_type: ReduceType::BloomFilter {
-                    size: 819200,
+                    size: 8192000,
                     num_hashes: 5, 
                     seed: 42,
                 },
@@ -110,8 +110,8 @@ pub fn query_4() -> QueryPlan {
             Operation::Map("(src_ip, dst_port , count = 1)".to_string()),
             Operation::Reduce {
                 keys: vec!["src_ip".to_string()],
-                // reduce_type: ReduceType::DeterministicReduce,
-                reduce_type: ReduceType::CMReduce { memory_in_bytes: 102400, depth: 3, seed: 42 },
+                reduce_type: ReduceType::DeterministicReduce,
+                // reduce_type: ReduceType::CMReduce { memory_in_bytes: 102400, depth: 3, seed: 42 },
                 // reduce_type: ReduceType::FCMReduce {
                 //     depth: 2,
                 //     width_l1: 32768,  
@@ -136,7 +136,11 @@ pub fn query_5() -> QueryPlan {
             Operation::Map ("(dst_ip, src_ip, total_len)".to_string()),
             Operation::Reduce {
                 keys: vec!["dst_ip".to_string(), "src_ip".to_string()],
-                reduce_type: ReduceType::DeterministicReduce,
+                reduce_type: ReduceType::CMReduce { memory_in_bytes: 102400, depth: 3, seed: 42 },
+                // reduce_type: ReduceType::FCMReduce { depth: 2, width_l1: 65536, width_l2: 8192, width_l3: 1024, threshold_l1: 254, threshold_l2: 65534, seed: 42 },
+
+
+                // reduce_type: ReduceType::DeterministicReduce,
 
                 // reduce_type: ReduceType::CMReduce { memory_in_bytes: 25600000, depth: 3, seed: 42 },
                 // reduce_type: ReduceType::FCMReduce {
@@ -150,7 +154,7 @@ pub fn query_5() -> QueryPlan {
                 // },
                 field_name: "total_len".to_string(),
             },
-            Operation::FilterResult { threshold: 40  , field_name: "total_len".to_string() },
+            Operation::FilterResult { threshold: 60000  , field_name: "total_len".to_string() },
         ],
     }
 }

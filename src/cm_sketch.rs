@@ -5,12 +5,10 @@ pub struct CMSketch {
     pub width: usize,
     pub counters: Vec<Vec<i32>>,
     pub hashes: Vec<BOBHash32>,
-    pub memory_in_bytes: usize,
-    pub name: String,
 }
 
 impl CMSketch {
-    pub fn new(memory_in_bytes: usize, depth: usize , seed: u64) -> Self {
+    pub fn new(memory_in_bytes: usize, depth: usize , _seed: u64) -> Self {
         let width = memory_in_bytes / 4 / depth;
         
         let counters = vec![vec![0; width]; depth];
@@ -19,15 +17,11 @@ impl CMSketch {
             .map(|i| BOBHash32::new(750 + (i as u32)))
             .collect();
 
-        let name = format!("CM@{}@{}", memory_in_bytes, depth);
-
         Self {
             depth,
             width,
             counters,
             hashes,
-            memory_in_bytes,
-            name,
         }
     }
 
@@ -47,15 +41,9 @@ impl CMSketch {
         ret
     }
 
-    pub fn print_basic_info(&self) {
-        println!("CM Sketch");
-        println!("\tCounters: {}", self.width);
-        println!("\tMemory: {:.6} MB", (self.width * 4) as f64 / 1024.0 / 1024.0);
-    }
-
-    pub fn clear(&mut self) {
-        for counters_row in &mut self.counters {
-            counters_row.fill(0);
-        }
-    }
+    // pub fn clear(&mut self) {
+    //     for counters_row in &mut self.counters {
+    //         counters_row.fill(0);
+    //     }
+    // }
 }

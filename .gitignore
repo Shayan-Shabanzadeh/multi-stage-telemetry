@@ -7,3 +7,5 @@
 /src/memory_log.csv
 /src/logs
 /result/
+pcap
+/.DS_Store

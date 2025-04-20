@@ -1,7 +1,6 @@
 use crate::query_plan::{QueryPlan, Operation, Field, ReduceType};
 use crate::sketch::Sketch;
-use std::collections::{HashMap, HashSet};
-use std::io::Write;
+use std::collections::{HashMap};
 use crate::pcap_processor::EPOCH_RESULTS;
 use lazy_static::lazy_static;
 use std::sync::Mutex;
@@ -300,7 +299,7 @@ pub fn execute_query(
             
             Operation::FilterResult { threshold, field_name } => {
                 // println!("timestamp: {}, current_epoch_start: {:?}", timestamp, current_epoch_start);
-                if timestamp - current_epoch_start.unwrap() >= epoch_size -1  {
+                if timestamp - current_epoch_start.unwrap() >= epoch_size  {
                     result_map.retain(|key, fields| {
                         // println!("Checking key: '{}', fields: {:?}", key, fields);
                         if let Some(PacketField::U16(value)) = fields.get(field_name) {
