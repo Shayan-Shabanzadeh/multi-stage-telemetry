@@ -1,7 +1,6 @@
 use crate::query_plan::{QueryPlan, Operation, Field, ReduceType};
 
-/// Query 1: Detect TCP SYN flood attacks
-/// Hosts for which the number of newly opened TCP connections exceeds threshold.
+/// Query 1: TCP New Connection
 pub fn query_1() -> QueryPlan {
     QueryPlan {
         operations: vec![
@@ -10,8 +9,8 @@ pub fn query_1() -> QueryPlan {
             Operation::Reduce {
                 keys: vec!["dst_ip".to_string()],
                 // reduce_type: ReduceType::DeterministicReduce,
-                // reduce_type: ReduceType::CMReduce { memory_in_bytes: 262144, depth: 3, seed: 42 },
-                reduce_type: ReduceType::FCMReduce { depth: 2, width_l1: 65536, width_l2: 8192, width_l3: 1024, threshold_l1: 254, threshold_l2: 65534, seed: 42 },
+                reduce_type: ReduceType::CMReduce { memory_in_bytes: 172032, depth: 3, seed: 42 },
+                // reduce_type: ReduceType::FCMReduce { depth: 2, width_l1: 65536, width_l2: 8192, width_l3: 1024, threshold_l1: 254, threshold_l2: 65534, seed: 42 },
                 // reduce_type: ReduceType::ElasticReduce { depth: 4, width: 516096, seed: 42 },
                 field_name: "count".to_string(),
             },
@@ -20,8 +19,7 @@ pub fn query_1() -> QueryPlan {
     }
 }
 
-// Query 2: Detect brute-force SSH attacks
-// Hosts that receive similar-sized packets from more than threshold unique senders.
+// Query 2: SSH Brute
 pub fn query_2() -> QueryPlan {
     QueryPlan {
         operations: vec![
@@ -49,8 +47,7 @@ pub fn query_2() -> QueryPlan {
     }
 }
 
-// Query 3: Super spreader detection
-// Detects hosts that make too many connections to different destinations.
+// Query 3: SuperSpreader	
 pub fn query_3() -> QueryPlan {
     QueryPlan {
         operations: vec![
@@ -58,29 +55,16 @@ pub fn query_3() -> QueryPlan {
             Operation::Distinct {
                 keys: vec!["dst_ip".to_string(), "src_ip".to_string()],
                 // distinct_type: ReduceType::DeterministicReduce,
-                distinct_type: ReduceType::BloomFilter {
-                    size: 819200,
-                    num_hashes: 5, 
-                    seed: 42,
-                },
+                // 50 KB
+                distinct_type: ReduceType::BloomFilter { size: 400000,num_hashes: 5, seed: 42,},
             },
             Operation::Map("(src_ip, count = 1)".to_string()),
             Operation::Reduce {
                 keys: vec!["src_ip".to_string()],
                 // reduce_type: ReduceType::DeterministicReduce,
-                reduce_type: ReduceType::CMReduce { memory_in_bytes: 102400, depth: 3, seed: 42 },
-                // 256 KB = 65536 * 1 + 8192 * 2 + 1024 * 4
-                // reduce_type: ReduceType::FCMReduce { depth: 2, width_l1: 65536, width_l2: 8192, width_l3: 1024, threshold_l1: 254, threshold_l2: 65534, seed: 42 },
-                // 100 KB = 32768 * 1 + 4096 * 2 + 512 * 4
-                // reduce_type: ReduceType::FCMReduce {
-                //     depth: 2,
-                //     width_l1: 32768,  // Width of layer 1 (2^15)
-                //     width_l2: 4096,   // Width of layer 2 (2^12)
-                //     width_l3: 512,    // Width of layer 3 (2^9)
-                //     threshold_l1: 254,
-                //     threshold_l2: 65534,
-                //     seed: 42,
-                // },
+                //  84 KB
+                reduce_type: ReduceType::CMReduce { memory_in_bytes: 86016, depth: 3, seed: 42 },
+                // reduce_type: ReduceType::FCMReduce { depth: 2, width_l1: 32768, width_l2: 4096, width_l3: 512, threshold_l1: 254, threshold_l2: 65534, seed: 42 },
                 // reduce_type: ReduceType::ElasticReduce { depth: 4, width: 1024, seed: 42 },
                 field_name: "count".to_string(),
             },
@@ -90,8 +74,7 @@ pub fn query_3() -> QueryPlan {
 }
 
 
-// Query 4: Detect port scan attacks
-// One host is scanning a lot of different ports, potentially before an attack.
+// Query 4: Port Scan
 pub fn query_4() -> QueryPlan {
     QueryPlan {
         operations: vec![
@@ -100,27 +83,15 @@ pub fn query_4() -> QueryPlan {
             Operation::Distinct {
                 keys: vec!["src_ip".to_string(), "dst_port".to_string()],
                 // distinct_type: ReduceType::DeterministicReduce,
-                distinct_type: ReduceType::BloomFilter {
-                    size: 8192000,
-                    num_hashes: 5, 
-                    seed: 42,
-                },
-                
+                distinct_type: ReduceType::BloomFilter { size: 400000,num_hashes: 5, seed: 42,},
             },
             Operation::Map("(src_ip, dst_port , count = 1)".to_string()),
             Operation::Reduce {
                 keys: vec!["src_ip".to_string()],
-                reduce_type: ReduceType::DeterministicReduce,
-                // reduce_type: ReduceType::CMReduce { memory_in_bytes: 102400, depth: 3, seed: 42 },
-                // reduce_type: ReduceType::FCMReduce {
-                //     depth: 2,
-                //     width_l1: 32768,  
-                //     width_l2: 4096,   
-                //     width_l3: 512,    
-                //     threshold_l1: 254,
-                //     threshold_l2: 65534,
-                //     seed: 42,
-                // },
+                // reduce_type: ReduceType::DeterministicReduce,
+                // 50 KB
+                // reduce_type: ReduceType::FCMReduce { depth: 2, width_l1: 19500, width_l2: 2438, width_l3: 304, threshold_l1: 254, threshold_l2: 65534, seed: 42 },
+                reduce_type: ReduceType::CMReduce { memory_in_bytes: 51184, depth: 3, seed: 42 },
                 field_name: "count".to_string(),
             },
             Operation::FilterResult { threshold: 40  , field_name: "count".to_string() },
@@ -129,29 +100,15 @@ pub fn query_4() -> QueryPlan {
 }
 
 // Query 5: Detect heavy hitters
-// Hosts that send a large amount of data to specific destinations.
 pub fn query_5() -> QueryPlan {
     QueryPlan {
         operations: vec![
             Operation::Map ("(dst_ip, src_ip, total_len)".to_string()),
             Operation::Reduce {
                 keys: vec!["dst_ip".to_string(), "src_ip".to_string()],
-                reduce_type: ReduceType::CMReduce { memory_in_bytes: 102400, depth: 3, seed: 42 },
-                // reduce_type: ReduceType::FCMReduce { depth: 2, width_l1: 65536, width_l2: 8192, width_l3: 1024, threshold_l1: 254, threshold_l2: 65534, seed: 42 },
-
-
                 // reduce_type: ReduceType::DeterministicReduce,
-
-                // reduce_type: ReduceType::CMReduce { memory_in_bytes: 25600000, depth: 3, seed: 42 },
-                // reduce_type: ReduceType::FCMReduce {
-                //     depth: 2,
-                //     width_l1: 32768,  // Width of layer 1 (2^15)
-                //     width_l2: 4096,   // Width of layer 2 (2^12)
-                //     width_l3: 512,    // Width of layer 3 (2^9)
-                //     threshold_l1: 254,
-                //     threshold_l2: 65534,
-                //     seed: 42,
-                // },
+                // reduce_type: ReduceType::CMReduce { memory_in_bytes: 172032, depth: 3, seed: 42 },
+                reduce_type: ReduceType::FCMReduce { depth: 2, width_l1: 65536, width_l2: 8192, width_l3: 1024, threshold_l1: 254, threshold_l2: 65534, seed: 42 },
                 field_name: "total_len".to_string(),
             },
             Operation::FilterResult { threshold: 60000  , field_name: "total_len".to_string() },
@@ -160,8 +117,9 @@ pub fn query_5() -> QueryPlan {
 }
 
 
+
+
 // Query 6: Detect SYN flood attacks
-// Hosts for which the number of half-open TCP connections exceeds threshold Th.
 pub fn query_6() -> QueryPlan {
     // Query to count SYN packets (TCP flags = 2)
     let n_syn = QueryPlan {
@@ -214,7 +172,7 @@ pub fn query_6() -> QueryPlan {
             },
             Operation::MapJoin("(dst_ip, count = left_count + right_count)".to_string()),
             Operation::FilterResult { 
-                threshold: 50,
+                threshold: 40,
                 field_name: "count".to_string(),
             },
         ],
@@ -223,8 +181,62 @@ pub fn query_6() -> QueryPlan {
     syn_flood_victim
 }
 
+// Completed Flow	
+pub fn query_7() -> QueryPlan {
+    let n_syn = QueryPlan {
+        operations: vec![
+            Operation::Filter(vec![(Field::Protocol, "6".to_string())]),
+            Operation::Filter(vec![(Field::TcpFlag, "2".to_string())]),
+            Operation::Map("(dst_ip, left_count = 1)".to_string()),
+            Operation::Reduce {
+                keys: vec!["dst_ip".to_string()],
+                reduce_type: ReduceType::DeterministicReduce,
+                field_name: "left_count".to_string(),
+            },
+        ],
+    };
+
+    // Query to count FIN packets (TCP flags = 1)
+    let n_fin = QueryPlan {
+        operations: vec![
+            Operation::Filter(vec![(Field::Protocol, "6".to_string())]),
+            Operation::Filter(vec![(Field::TcpFlag, "1".to_string())]),
+            Operation::Map("(src_ip, right_count = 1)".to_string()),
+            Operation::Reduce {
+                keys: vec!["src_ip".to_string()],
+                reduce_type: ReduceType::DeterministicReduce,
+                field_name: "right_count".to_string(),
+            },
+        ],
+    };
+
+    // Join the results of n_syn and n_fin
+    let q3 = QueryPlan {
+        operations: vec![
+            // Join n_syn and n_fin
+            Operation::Join {
+                left_query: Box::new(n_syn),
+                right_query: Box::new(n_fin),
+                left_keys: vec!["dst_ip".to_string()],
+                right_keys: vec!["src_ip".to_string()],
+            },
+            // Map the joined results and calculate the difference
+            Operation::Map("(dst_ip, src_ip, diff = count1 - count2)".to_string()),
+            // Filter where the difference >= T (T = 1)
+            Operation::FilterResult {
+                threshold: 1,
+                field_name: "diff".to_string(),
+            },
+            // Map only the destination IP
+            Operation::Map("(dst_ip)".to_string()),
+        ],
+    };
+
+    q3
+}
+
+
 // Query 8: Detect Slowloris attacks
-// Hosts for which the average number of connections per byte exceeds a threshold.
 pub fn query_8() -> QueryPlan {
     let n_conns = QueryPlan {
         operations: vec![
@@ -272,7 +284,6 @@ pub fn query_8() -> QueryPlan {
 }
 
 //  Query 11: Detect DNS reflection attacks
-//  Hosts that receive a large number of DNS responses from specific sources.
 // pub fn query_11() -> QueryPlan {
 //     QueryPlan {
 //         operations: vec![

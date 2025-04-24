@@ -402,9 +402,9 @@ pub fn execute_query(
                     );
                 }
 
-
             
-                if timestamp - current_epoch_start.unwrap() > epoch_size {
+                if timestamp - current_epoch_start.unwrap() >= epoch_size -1 {
+                    println!("Join operation triggered at timestamp: {}", timestamp);
 
                     let mut joined_results: HashMap<String, HashMap<String, PacketField>> = HashMap::new();
                         
@@ -449,7 +449,7 @@ pub fn execute_query(
                         }
                     }
 
-                    println!("join result :{:?}" , joined_results);
+                    // println!("join result :{:?}" , joined_results);
 
 
                     result_map.clear();
