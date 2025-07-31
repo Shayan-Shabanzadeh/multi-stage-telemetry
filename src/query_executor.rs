@@ -18,6 +18,7 @@ lazy_static! {
 pub enum PacketField {
     String(String),
     U16(u16),
+    U32(u32),
     U8(u8),
     OptionU16(Option<u16>),
     OptionTupleU16(Option<(u16, u16)>),
@@ -124,7 +125,6 @@ pub fn execute_query(
 ) -> Option<HashMap<String, PacketField>>  {
     let mut current_packet = packet;
 
-
     for op in &query.operations {
         if current_packet.is_empty() {
             eprintln!("Warning: Received an empty packet. Ignoring it.");
@@ -185,10 +185,10 @@ pub fn execute_query(
                             let key = parts[0];
                             let value = parts[1];
             
-                            if let Ok(parsed_value) = value.parse::<u16>() {
-                                new_packet.insert(key.to_string(), PacketField::U16(parsed_value));
-                            } else if let Ok(parsed_value) = value.parse::<u8>() {
-                                new_packet.insert(key.to_string(), PacketField::U8(parsed_value));
+                            if let Ok(parsed_value) = value.parse::<u32>() {
+                                new_packet.insert(key.to_string(), PacketField::U32(parsed_value));
+                            } else if let Ok(parsed_value) = value.parse::<u32>() {
+                                new_packet.insert(key.to_string(), PacketField::U32(parsed_value));
                             } else {
                                 new_packet.insert(key.to_string(), PacketField::String(value.to_string()));
                             }
@@ -200,6 +200,7 @@ pub fn execute_query(
                         }
                     }
                 }
+                // println!("old packet: {:?}. \n new packet: {:?}", current_packet, new_packet);
                 current_packet = new_packet;
             }
 
@@ -223,6 +224,9 @@ pub fn execute_query(
                         format!("CMSketch_{}_{}", memory_in_bytes, depth)
                     }
 
+                    ReduceType::FCMFirstLayerOnly { depth, width_l1, seed } => {
+                        format!("FCMFirstLayerOnly_{}_{}", depth, width_l1)
+                    }
                     ReduceType::FCMReduce {
                         depth,
                         width_l1,
@@ -237,6 +241,19 @@ pub fn execute_query(
                     ReduceType::ElasticReduce { depth, width, seed } => {
                         format!("ElasticSketch_{}_{}", depth, width)
                     }
+
+                    ReduceType::BeauCoupReduce {
+                        num_rows,
+                        num_coupons,
+                        d,
+                        max_coupons_per_packet,
+                        seed,
+                    } => {
+                        format!(
+                            "BeauCoup_rows{}_coupons{}_d{}_cpp{}_seed{}",
+                            num_rows, num_coupons, d, max_coupons_per_packet, seed
+                        )
+                    }
                     ReduceType::DeterministicReduce => "DeterministicSketch".to_string(),
                     ReduceType::BloomFilter { .. } => {
                         eprintln!("Error: BloomFilter is not supported in Reduce operation");
@@ -248,6 +265,18 @@ pub fn execute_query(
                     ReduceType::CMReduce { memory_in_bytes, depth, seed } => {
                         Sketch::new_cm_sketch(*memory_in_bytes, *depth, *seed)
                     }
+                    ReduceType::BeauCoupReduce {
+                        num_rows,
+                        num_coupons,
+                        d,
+                        max_coupons_per_packet,
+                        seed,
+                    } => Sketch::new_beaucoup(*num_rows, *num_coupons, *d, *max_coupons_per_packet, *seed),
+                    ReduceType::FCMFirstLayerOnly {
+                        depth,
+                        width_l1,
+                        seed,
+                    } => Sketch::new_fcm_first_layer_only(*depth, *width_l1, *seed),
                     ReduceType::FCMReduce {
                         depth,
                         width_l1,
@@ -272,38 +301,59 @@ pub fn execute_query(
                     ReduceType::BloomFilter { .. } => panic!("BloomFilter should not reach here"),
                 });
             
-                if let Some(PacketField::U16(current_value)) = current_packet.get(field_name) {
-                    sketch.increment(&key, *current_value as u64);
-                    let estimated_count = sketch.estimate(&key);
+                if let Some(PacketField::U32(current_value)) = current_packet.get(field_name) {
+                    let normalized_value = *current_value as u32; 
+
+                    
+                    // let raw = (*current_value).max(2) as f64; // to avoid ln(0), ln(1)
+                    // let loglog_value = raw.ln().ln();
+                    // let normalized_value = loglog_value.max(1.0).floor() as u32;
+
 
                     current_packet.insert(
                         field_name.to_string(),
-                        PacketField::U16(estimated_count as u16),
+                        PacketField::U32(normalized_value),
                     );
 
-                    result_map
-                    .entry(key.clone())
-                    .and_modify(|existing_packet| {
-                        for (field_key, field_value) in &current_packet {
-                            existing_packet.insert(field_key.clone(), field_value.clone());
-                        }
-                    })
-                    .or_insert(current_packet.clone()); // Insert the entire packet if the key doesn't exist
+                    // println!("current packet: {:?}", current_packet);
+                    sketch.increment(&key, normalized_value as u64);
+                    let estimated_count = sketch.estimate(&key);
+                    // if key == "dst_ip: 35.26.185.176, src_ip: 163.27.199.6" {
+                    //     println!("Estimated count for key '{}': {}", key, estimated_count);
+                    // }
+
+                    current_packet.insert(
+                        field_name.to_string(),
+                        PacketField::U32(estimated_count as u32),
+                    );
+                    // if key == "dst_ip: 35.26.185.176, src_ip: 163.27.199.6" {
+                    //     println!("current packet field : {:?},  field value : {:?} and estimated count: {:?}", field_name.to_string(), current_packet.get(field_name), estimated_count);
+                    // }
+
+                    
+                    
+                    result_map.insert(key.clone(), current_packet.clone());
             
                 } else {
-                    // eprintln!("Error reduce: field '{}' not found or invalid in packet", field_name);
                     return None;
                 }
+                // println!("packet after reduce operation: {:?}", current_packet);
             }
             
             
             Operation::FilterResult { threshold, field_name } => {
                 // println!("timestamp: {}, current_epoch_start: {:?}", timestamp, current_epoch_start);
+                // println!("result map before filtering: {:?}", result_map);
                 if timestamp - current_epoch_start.unwrap() >= epoch_size  {
+                    // println!("result map start filtering: {:?}", result_map);
                     result_map.retain(|key, fields| {
                         // println!("Checking key: '{}', fields: {:?}", key, fields);
-                        if let Some(PacketField::U16(value)) = fields.get(field_name) {
-                            if *value >= *threshold as u16 {
+                        if let Some(PacketField::U32(value)) = fields.get(field_name) {
+                            if *value >= *threshold as u32 {
+                                // println!(
+                                //     "Keeping entry: '{}' with field '{}' value: {}",
+                                //     key, field_name, value
+                                // );
                                 true // Keep the entry
                             } else {
                                 false // Remove the entry
@@ -316,6 +366,7 @@ pub fn execute_query(
                             false // Remove the entry if the field is missing or invalid
                         }
                     });
+                    println!("result map after filtering: {:?}", result_map);
                 
                 }
             },

@@ -38,11 +38,13 @@ fn extract_packet_tuple(packet: &pcap::Packet) -> Option<HashMap<String, PacketF
         packet_map.insert("src_port".to_string(), PacketField::U16(tcp.get_source()));
         packet_map.insert("dst_port".to_string(), PacketField::U16(tcp.get_destination()));
         packet_map.insert("tcp_flags".to_string(), PacketField::U8(tcp.get_flags()));
-        packet_map.insert("total_len".to_string(), PacketField::U16(ipv4.get_total_length()));
+        packet_map.insert("total_len".to_string(), PacketField::U32(ipv4.get_total_length() as u32));
         packet_map.insert("protocol".to_string(), PacketField::U8(ipv4.get_next_level_protocol().0));
         packet_map.insert("dns_ns_type".to_string(), PacketField::OptionU16(None));
+        // println!("Extracted packet tuple: {:?}", packet_map); // Debugging statement
         Some(packet_map)
     } else {
+        // println!("Non-TCP packet encountered, skipping.");
         None
     }
 }
@@ -55,7 +57,7 @@ fn print_epoch_summary(
     result_map: &HashMap<String, HashMap<String, PacketField>>, // Updated type
     log_file: &mut std::fs::File,
     field_name: &str,
-    threshold: u16, // Add threshold as a parameter
+    threshold: u32, // Add threshold as a parameter
 ) {
     println!("Logging epoch summary...");
     let mut summary = format!(
@@ -67,11 +69,11 @@ fn print_epoch_summary(
     summary.push_str("flow_key, value\n");
 
     // Collect entries, filter by threshold, and sort them by the specified field in descending order
-    let mut entries: Vec<(String, u16)> = result_map
+    let mut entries: Vec<(String, u32)> = result_map
         .iter()
         .filter_map(|(key, fields)| {
-            if let Some(PacketField::U16(value)) = fields.get(field_name) {
-                if *value > threshold {
+            if let Some(PacketField::U32(value)) = fields.get(field_name) {
+                if *value > threshold as u32 {
                     Some((key.clone(), *value)) // Include only if value > threshold
                 } else {
                     None
@@ -148,8 +150,8 @@ pub fn process_pcap(file_path: &str, epoch_size: u64, threshold: usize, query: Q
                 total_packets,
                 &result_map,
                 &mut log_file,
-                "total_len", // Field name to check against the threshold
-                threshold as u16,
+                "count", // Field name to check against the threshold
+                threshold as u32,
             );
 
             // Clear sketches and result map for the new epoch
@@ -179,8 +181,8 @@ if let Some(epoch_start) = current_epoch_start {
             total_packets,
             &result_map,
             &mut log_file,
-            "total_len", // Field name to check against the threshold
-            threshold as u16,
+            "count", // Field name to check against the threshold
+            threshold as u32,
         );
     }
 }

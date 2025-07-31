@@ -5,9 +5,9 @@ const FCMSK_K_ARY: usize = 8; // k-ary tree
 const FCMSK_K_POW: usize = 3; // 2^3 = 8
 const HH_THRESHOLD: u32 = 10000; // Heavy hitter threshold
 
-type FCMSK_C1 = u8;  // 8-bit
-type FCMSK_C2 = u16; // 16-bit
-type FCMSK_C3 = u32; // 32-bit
+    type FCMSK_C1 = u32;  // 8-bit
+    type FCMSK_C2 = u32; // 16-bit
+    type FCMSK_C3 = u32; // 32-bit
 
 pub struct FCMSketch {
     pub depth: usize,
@@ -54,60 +54,167 @@ impl FCMSketch {
         let mut ret_val = vec![0; self.depth];
         let mut hh_flag = true;
     
+        // Define the target item
+        let target_item = "dst_ip: 35.26.185.176, src_ip: 163.27.199.6".as_bytes();
+        let is_target_item = item == target_item;
+    
+        // if is_target_item {
+        //     println!("[DEBUG] Target item detected: dst_ip: 35.26.185.176, src_ip: 163.27.199.6 with count {:?}", count);
+        // }
+    
+        // Compute hash indices for each depth
         for d in 0..self.depth {
             hash_index[d] = self.hash_functions[d].run(item) as usize % self.width_l1;
+    
+            // if is_target_item {
+            //     println!(
+            //         "[DEBUG] Depth {}: Hash index for L1 = {}",
+            //         d, hash_index[d]
+            //     );
+            // }
         }
     
         for d in 0..self.depth {
-            ret_val[d] = self.increment_counter_l1(d, hash_index[d], count);
+            let mut idx = hash_index[d];
     
-            if ret_val[d] > self.threshold_l1 {
-                let idx_l2 = hash_index[d] / FCMSK_K_ARY;  // <-- Corrected to match C++ (division)
-                ret_val[d] = self.increment_counter_l2(d, idx_l2, count) + self.cumul_l2;
+            // Stage 1: L1
+            ret_val[d] = self.increment_counter_l1(d, idx, count);
     
-                if ret_val[d] > self.threshold_l2 {
-                    let idx_l3 = idx_l2 / FCMSK_K_ARY;  // <-- Corrected to match C++ (division)
-                    ret_val[d] = self.increment_counter_l3(d, idx_l3, count) + self.cumul_l3;
-                }
+            // if is_target_item {
+            //     println!(
+            //         "[DEBUG] Depth {}: L1 Counter[{}] = {} after increment",
+            //         d, idx, self.counters_l1[d][idx]
+            //     );
+            // }
+    
+            if ret_val[d] <= self.threshold_l1 {
+                // Did not overflow, done
+                continue;
             }
     
+            // Stage 2: L2
+            idx = idx / FCMSK_K_ARY;
+            ret_val[d] = self.increment_counter_l2(d, idx, count) + self.cumul_l2;
+    
+            // if is_target_item {
+            //     println!(
+            //         "[DEBUG] Depth {}: L2 Counter[{}] = {} after increment",
+            //         d, idx, self.counters_l2[d][idx]
+            //     );
+            // }
+    
+            if ret_val[d] <= self.threshold_l2 {
+                continue;
+            }
+    
+            // Stage 3: L3
+            idx = idx / FCMSK_K_ARY;
+            ret_val[d] = self.increment_counter_l3(d, idx, count) + self.cumul_l3;
+    
+            // if is_target_item {
+            //     println!(
+            //         "[DEBUG] Depth {}: L3 Counter[{}] = {} after increment",
+            //         d, idx, self.counters_l3[d][idx]
+            //     );
+            // }
+        }
+    
+        // Check if the item qualifies as a heavy hitter
+        for d in 0..self.depth {
             if ret_val[d] <= HH_THRESHOLD {
                 hh_flag = false;
+                break;
             }
         }
     
         if hh_flag {
             if item.len() == 4 {
-                let item_u32 = u32::from_be_bytes(item.try_into().unwrap());  // <-- Changed from_ne_bytes to from_be_bytes to match network byte-order conversion in C++
+                let item_u32 = u32::from_be_bytes(item.try_into().unwrap());
                 self.hh_candidates.insert(item_u32);
+    
+                // if is_target_item {
+                //     println!("[DEBUG] Heavy hitter detected: {:?}", item_u32);
+                // }
             }
         }
     }
-
+    
     pub fn query(&self, item: &[u8]) -> u32 {
         let mut hash_index = vec![0; self.depth];
         let mut ret_val = vec![0; self.depth];
         let mut count_query = u32::MAX;
     
+        // Define the target item
+        let target_item = "dst_ip: 35.26.185.176, src_ip: 163.27.199.6".as_bytes();
+        let is_target_item = item == target_item;
+    
+        // if is_target_item {
+        //     println!("[DEBUG] Querying target item: dst_ip: 35.26.185.176, src_ip: 163.27.199.6");
+        // }
+    
+        // Compute hash indices for each depth
         for d in 0..self.depth {
             hash_index[d] = self.hash_functions[d].run(item) as usize % self.width_l1;
+    
+            // if is_target_item {
+            //     println!(
+            //         "[DEBUG] Depth {}: Hash index for L1 = {}",
+            //         d, hash_index[d]
+            //     );
+            // }
         }
     
         for d in 0..self.depth {
-            ret_val[d] = self.query_counter_l1(d, hash_index[d]);
+            let mut idx = hash_index[d];
     
-            if ret_val[d] > self.threshold_l1 {
-                let idx_l2 = hash_index[d] / FCMSK_K_ARY;  // <-- Corrected to match C++ (division)
-                ret_val[d] = self.query_counter_l2(d, idx_l2) + self.cumul_l2;
+            // Stage 1: L1
+            ret_val[d] = self.query_counter_l1(d, idx);
     
-                if ret_val[d] > self.threshold_l2 {
-                    let idx_l3 = idx_l2 / FCMSK_K_ARY;  // <-- Corrected to match C++ (division)
-                    ret_val[d] = self.query_counter_l3(d, idx_l3) + self.cumul_l3;
-                }
+            // if is_target_item {
+            //     println!(
+            //         "[DEBUG] Depth {}: L1 Counter[{}] = {}",
+            //         d, idx, self.counters_l1[d][idx]
+            //     );
+            // }
+    
+            if ret_val[d] <= self.threshold_l1 {
+                count_query = count_query.min(ret_val[d]);
+                continue;
             }
+    
+            // Stage 2: L2
+            idx = idx / FCMSK_K_ARY;
+            ret_val[d] = self.query_counter_l2(d, idx) + self.cumul_l2;
+    
+            // if is_target_item {
+            //     println!(
+            //         "[DEBUG] Depth {}: L2 Counter[{}] = {}",
+            //         d, idx, self.counters_l2[d][idx]
+            //     );
+            // }
+    
+            if ret_val[d] <= self.threshold_l2 {
+                count_query = count_query.min(ret_val[d]);
+                continue;
+            }
+    
+            // Stage 3: L3
+            idx = idx / FCMSK_K_ARY;
+            ret_val[d] = self.query_counter_l3(d, idx) + self.cumul_l3;
+    
+            // if is_target_item {
+            //     println!(
+            //         "[DEBUG] Depth {}: L3 Counter[{}] = {}",
+            //         d, idx, self.counters_l3[d][idx]
+            //     );
+            // }
     
             count_query = count_query.min(ret_val[d]);
         }
+    
+        // if is_target_item {
+        //     println!("[DEBUG] Final query result for target item: {}", count_query);
+        // }
     
         count_query
     }

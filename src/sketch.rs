@@ -3,6 +3,8 @@ use crate::fcm_sketch::FCMSketch;
 use crate::elastic_sketch::ElasticSketch;
 use crate::deterministic_sketch::DeterministicSketch;
 use crate::bloom_filter::BloomFilter;
+use crate::fcm_first_layer_sketch::FCMFirstLayerOnly;
+use crate::beaucoup::BeauCoupSketch;
 
 pub enum Sketch {
     CMSketch(CMSketch),
@@ -10,6 +12,9 @@ pub enum Sketch {
     ElasticSketch(ElasticSketch),
     DeterministicSketch(DeterministicSketch),
     BloomFilter(BloomFilter),
+    FCMFirstLayerOnly(FCMFirstLayerOnly),
+    BeauCoup(BeauCoupSketch), 
+    
 }
 
 impl Sketch {
@@ -35,6 +40,10 @@ impl Sketch {
         Sketch::ElasticSketch(ElasticSketch::new(depth, width, seed))
     }
 
+    pub fn new_fcm_first_layer_only(depth: usize, width_l1: usize, seed: u64) -> Self {
+        Sketch::FCMFirstLayerOnly(FCMFirstLayerOnly::new(depth, width_l1, seed))
+    }
+
     pub fn new_deterministic_sketch() -> Self {
         Sketch::DeterministicSketch(DeterministicSketch::new())
     }
@@ -43,12 +52,30 @@ impl Sketch {
         Sketch::BloomFilter(BloomFilter::new(size, num_hashes , seed))
     }
 
+pub fn new_beaucoup(
+    num_rows: usize,
+    num_coupons: usize,
+    d: usize,
+    max_coupons_per_packet: usize,
+    seed: u64,
+) -> Self {
+    Sketch::BeauCoup(BeauCoupSketch::new(
+        num_rows,
+        num_coupons,
+        d,
+        max_coupons_per_packet,
+        seed,
+    ))
+}
+
     pub fn contains(&self, item: &str) -> bool {
         match self {
             Sketch::CMSketch(_) => panic!("CMSketch does not support contains"),
             Sketch::FCMSketch(_) => panic!("FCMSketch does not support contains"),
             Sketch::ElasticSketch(_) => panic!("ElasticSketch does not support contains"),
             Sketch::DeterministicSketch(_) => panic!("DeterministicSketch does not support contains"),
+            Sketch::FCMFirstLayerOnly(_) => panic!("FCMFirstLayerOnly does not support contains"),
+            Sketch::BeauCoup(sketch) => sketch.contains(item),
             Sketch::BloomFilter(bloom) => bloom.contains(item),
         }
     }
@@ -57,20 +84,35 @@ impl Sketch {
         match self {
             Sketch::CMSketch(sketch) => sketch.insert(item.as_bytes(), count as i32),
             Sketch::FCMSketch(sketch) => sketch.insert(item.as_bytes(), count as u32),
+            Sketch::FCMFirstLayerOnly(sketch) => sketch.insert(item.as_bytes(), count as u32), // Handle FCMFirstLayerOnly
             Sketch::ElasticSketch(sketch) => sketch.insert(item.as_bytes(), count as u32),
             Sketch::DeterministicSketch(sketch) => sketch.insert(item, count),
+            Sketch::BeauCoup(sketch) => sketch.insert(item),
             Sketch::BloomFilter(_) => panic!("BloomFilter does not support increment operation"),
         }
     }
-
+    
     pub fn estimate(&self, item: &str) -> u64 {
-        match self {
+        // Define the target item
+        let target_item = "dst_ip: 35.26.185.176, src_ip: 163.27.199.6";
+        let is_target_item = item == target_item;
+    
+        // Perform the estimate
+        let estimate = match self {
             Sketch::CMSketch(sketch) => sketch.query(item.as_bytes()) as u64,
             Sketch::FCMSketch(sketch) => sketch.query(item.as_bytes()) as u64,
+            Sketch::FCMFirstLayerOnly(sketch) => sketch.query(item.as_bytes()) as u64, // Handle FCMFirstLayerOnly
             Sketch::ElasticSketch(sketch) => sketch.query(item.as_bytes()) as u64,
             Sketch::DeterministicSketch(sketch) => sketch.query(item),
+            Sketch::BeauCoup(sketch) => sketch.estimate(item),
             Sketch::BloomFilter(_) => panic!("BloomFilter does not support estimate operation"),
-        }
+        };
+    
+        // if is_target_item {
+        //     println!("[DEBUG] Estimate for target item '{}': {}", item, estimate);
+        // }
+    
+        estimate
     }
 
     pub fn insert(&mut self, item: &str) {
@@ -79,6 +121,8 @@ impl Sketch {
             Sketch::FCMSketch(_) => panic!("FCMSketch does not support insert"),
             Sketch::ElasticSketch(_) => panic!("ElasticSketch does not support insert"),
             Sketch::DeterministicSketch(_) => panic!("DeterministicSketch does not support insert"),
+            Sketch::FCMFirstLayerOnly(_) => panic!("FCMFirstLayerOnly does not support insert"),
+            Sketch::BeauCoup(sketch) => sketch.insert(item),
             Sketch::BloomFilter(bloom) => bloom.insert(item),
         }
     }
@@ -91,12 +135,16 @@ impl Sketch {
                 sketch.counters_l2.iter_mut().for_each(|row| row.fill(0));
                 sketch.counters_l3.iter_mut().for_each(|row| row.fill(0));
             }
+            Sketch::FCMFirstLayerOnly(sketch) => {
+                sketch.counters_l1.iter_mut().for_each(|row| row.fill(0)); // Handle FCMFirstLayerOnly
+            }
             Sketch::ElasticSketch(sketch) => {
                 sketch.light_counters.iter_mut().for_each(|row| row.fill(0));
                 sketch.heavy_counters.fill(0);
             }
             Sketch::DeterministicSketch(sketch) => sketch.clear(),
             Sketch::BloomFilter(bloom) => bloom.clear(),
+            Sketch::BeauCoup(sketch) => sketch.clear(),
         }
     }
 }
